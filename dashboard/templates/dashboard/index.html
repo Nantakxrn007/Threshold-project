@@ -1,0 +1,853 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anomaly Detection Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}">
+</head>
+
+<body>
+<div class="app">
+
+  <!-- ── Top Bar ───────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-title">🔬 <span>Anomaly</span> Detection Suite</div>
+    {% for r in normal_runs %}<span class="badge badge-normal">✓ {{ r }}</span>{% endfor %}
+    {% for r in anomaly_runs %}<span class="badge badge-anomaly">⚠ {{ r }}</span>{% endfor %}
+  </header>
+
+  <div class="body">
+
+    <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">⚙ Model Config</div>
+
+        <div class="form-group">
+          <label class="form-label">Architecture</label>
+          <select id="model-type">
+            {% for m in model_choices %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="range-row">
+            <label class="form-label" style="margin:0">Window (seq_len)</label>
+            <span class="range-val" id="seq-val">10</span>
+          </div>
+          <input type="range" id="seq-len" min="5" max="50" value="10"
+                 oninput="document.getElementById('seq-val').textContent=this.value">
+        </div>
+
+        <div class="form-group">
+          <div class="range-row">
+            <label class="form-label" style="margin:0">Epochs</label>
+            <span class="range-val" id="epochs-val">30</span>
+          </div>
+          <input type="range" id="epochs" min="10" max="200" step="10" value="30"
+                 oninput="document.getElementById('epochs-val').textContent=this.value">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Hidden Size</label>
+          <select id="hidden">
+            <option value="8">8</option><option value="16" selected>16</option>
+            <option value="32">32</option><option value="64">64</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Layers</label>
+          <select id="layers">
+            <option value="1" selected>1</option>
+            <option value="2">2</option><option value="3">3</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Learning Rate</label>
+          <input type="number" id="lr" value="0.005" step="0.0005" min="0.0001">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Batch Size</label>
+          <select id="batch">
+            <option value="32">32</option><option value="64" selected>64</option>
+            <option value="128">128</option><option value="256">256</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="range-row">
+            <label class="form-label" style="margin:0">EWMA Alpha</label>
+            <span class="range-val" id="ewma-val">0.3</span>
+          </div>
+          <input type="range" id="ewma" min="0.01" max="1" step="0.01" value="0.3"
+                 oninput="document.getElementById('ewma-val').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-train" onclick="startTraining()">🔥 Train Model</button>
+      <div id="train-msg"></div>
+      <div class="divider"></div>
+
+      <!-- ── Error Aggregation + Labels ───────────────────────── -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">📊 Error Settings</div>
+
+        <div class="form-group">
+          <label class="form-label">Aggregation Method</label>
+          <select id="agg-method" onchange="onAggChange()">
+            <option value="mean">Mean (ค่าเฉลี่ย)</option>
+            <option value="max" selected>Max (แนะนำ)</option>
+            <option value="l2">L2 Norm</option>
+          </select>
+          <div style="font-size:0.68rem;color:var(--text-3);margin-top:4px;line-height:1.5;" id="agg-hint">
+            Max — sensor ใดผิดปกติ โผล่ขึ้นทันที ไม่ถูก dilute
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.78rem;color:var(--text-2);">
+            <input type="checkbox" id="show-labels" checked
+                   onchange="onLabelsChange()"
+                   style="width:15px;height:15px;accent-color:var(--red);cursor:pointer;">
+            แสดง Anomaly Labels
+          </label>
+        </div>
+        <div style="font-size:0.68rem;color:var(--text-3);line-height:1.5;">
+          แถบสีแดง = ground truth จาก dataset
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="progress-section" style="display:none">
+        <div class="form-label">Training Progress</div>
+        <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <div id="progress-label" style="font-size:0.7rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
+        <div id="loss-chart" style="margin-top:8px;"></div>
+      </div>
+    </aside>
+
+    <!-- ── Main Panel ───────────────────────────────────────────────── -->
+    <main class="main">
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('umap',this)">🌌 UMAP</button>
+        <button class="tab-btn" onclick="switchTab('inspector',this)">🔗 Inspector</button>
+        <button class="tab-btn" onclick="switchTab('anomaly',this)">🚨 Anomalies</button>
+        <button class="tab-btn" onclick="switchTab('tuner',this)">🎛 Tuner</button>
+        <button class="tab-btn" onclick="switchTab('trainall',this)">🏋️ Train All</button>
+        <button class="tab-btn" onclick="switchTab('results',this)">📊 Results</button>
+        <button class="tab-btn" onclick="switchTab('gridsearch',this)">🔍 Grid Search</button>
+      </div>
+
+      <!-- ── Tab: UMAP ────────────────────────────────────────────── -->
+      <div id="tab-umap" class="tab-panel active">
+        <div class="card">
+          <div class="section-title">Latent Space Projection</div>
+          <p class="hint">Normal กับ Anomaly ควรแยกกลุ่มถ้าโมเดล learn ได้ดี (Default = PCA เพราะเร็วกว่า)</p>
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label">Method</label>
+              <select id="umap-method" onchange="toggleUmapParams()">
+                <option value="pca" selected>PCA (Fast)</option>
+                <option value="umap">UMAP (Detailed)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label" id="label-nn" style="opacity:0.4;">n_neighbors</label>
+              <input type="range" id="umap-nn" min="5" max="50" value="15" disabled
+                     oninput="document.getElementById('unn-val').textContent=this.value">
+              <div class="range-row" id="row-nn" style="opacity:0.4;"><span></span><span class="range-val" id="unn-val">15</span></div>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label" id="label-md" style="opacity:0.4;">min_dist</label>
+              <input type="range" id="umap-md" min="0.01" max="0.99" step="0.01" value="0.1" disabled
+                     oninput="document.getElementById('umd-val').textContent=parseFloat(this.value).toFixed(2)">
+              <div class="range-row" id="row-md" style="opacity:0.4;"><span></span><span class="range-val" id="umd-val">0.10</span></div>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label">Color by</label>
+              <select id="umap-color">
+                <option value="run">Run ID</option>
+                <option value="type">Normal / Anomaly</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-recompute" style="width:auto;padding:8px 18px;" onclick="loadUmap()">↻ Recompute</button>
+          </div>
+          <div id="umap-chart"></div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Inspector ───────────────────────────────────────── -->
+      <div id="tab-inspector" class="tab-panel">
+        <div class="card">
+          <div class="inspector-header">
+            <div class="section-title" style="margin:0">🔗 Linked Run Inspector</div>
+            <select id="inspect-run" style="width:160px" onchange="loadInspector()">
+              {% for r in all_runs %}<option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>{% endfor %}
+            </select>
+            <span class="inspector-hint">↔ Hover Raw Data → vline syncs to all 3 charts</span>
+          </div>
+          <div id="inspect-umap-chart"></div>
+          <div style="height:8px;"></div>
+          <div id="inspect-raw-chart"></div>
+          <div style="height:8px;"></div>
+          <div id="inspect-err-chart"></div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Anomalies ───────────────────────────────────────── -->
+      <div id="tab-anomaly" class="tab-panel">
+        <div class="section-title">🚨 Anomaly Detection Results</div>
+        <p class="hint" style="margin-bottom:16px;">ปรับ parameter ได้ใน Threshold Tuner</p>
+        <div id="anomaly-charts">
+          <div class="card" style="color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.8rem;padding:32px;text-align:center;">
+            Train a model first to see anomaly results.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Threshold Tuner ─────────────────────────────────── -->
+      <div id="tab-tuner" class="tab-panel">
+        <div class="card">
+          <div class="section-title">🎛 Threshold Parameter Tuner</div>
+          <p class="hint">ปรับ slider → กราฟ update ทันที — ไม่ต้อง retrain<br>
+          หลังปรับ threshold แล้ว ไปหน้า 📊 Results กด ↻ Recompute เพื่อดูผลใหม่</p>
+          <div class="tuner-wrap">
+            <div class="tuner-controls">
+              <div class="form-group">
+                <label class="form-label">Run to tune on</label>
+                <select id="tuner-run" onchange="loadTuner()">
+                  {% for r in all_runs %}<option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+              </div>
+
+              <div class="card th-section" style="border-left:3px solid #ef4444;padding:12px;">
+                <div class="th-title" style="color:#ef4444;display:flex;justify-content:space-between;align-items:center;">
+                  🔴 TH1 — Sliding Percentile
+                  <button onclick="resetTh(1)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;cursor:pointer;">↺ Reset</button>
+                </div>
+
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label class="form-label">Mode</label>
+                  <select id="th1-mode" onchange="_toggleTh1SlidingParams();debounceTuner()" style="font-size:0.78rem;">
+                    <option value="sliding" selected>Sliding Window (Realistic)</option>
+                    <option value="static">Static (Normal baseline)</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Percentile</label><span class="range-val" id="th1-pct-val">99.0</span></div>
+                  <input type="range" id="th1-pct" min="90" max="99.9" step="0.1" value="99.0"
+                         oninput="document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                </div>
+
+                <div id="th1-sliding-params">
+                  <div class="form-group">
+                    <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th1-win-val">100</span></div>
+                    <input type="range" id="th1-win" min="20" max="300" step="10" value="100"
+                           oninput="document.getElementById('th1-win-val').textContent=this.value;debounceTuner()">
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th1-recalc-val">10</span></div>
+                    <input type="range" id="th1-recalc" min="1" max="50" step="1" value="10"
+                           oninput="document.getElementById('th1-recalc-val').textContent=this.value;debounceTuner()">
+                  </div>
+                </div>
+              </div>
+
+              <div class="card th-section" style="border-left:3px solid #3b82f6;padding:12px;">
+                <div class="th-title" style="color:#3b82f6;display:flex;justify-content:space-between;align-items:center;">
+                  🔵 TH2 — Sliding Mu + α·Std
+                  <button onclick="resetTh(2)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;">↺ Reset</button>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label><span class="range-val" id="th2-alpha-val">3.5</span></div>
+                  <input type="range" id="th2-alpha" min="1" max="7" step="0.1" value="3.5"
+                         oninput="document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th2-win-val">80</span></div>
+                  <input type="range" id="th2-win" min="10" max="200" step="5" value="80"
+                         oninput="document.getElementById('th2-win-val').textContent=this.value;debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Recalc every N</label><span class="range-val" id="th2-recalc-val">50</span></div>
+                  <input type="range" id="th2-recalc" min="5" max="100" step="5" value="50"
+                         oninput="document.getElementById('th2-recalc-val').textContent=this.value;debounceTuner()">
+                </div>
+              </div>
+
+              <div class="card th-section" style="border-left:3px solid #10b981;padding:12px;">
+                <div class="th-title" style="color:#10b981;display:flex;justify-content:space-between;align-items:center;">
+                  🟢 TH3 — Adaptive-z
+                  <button onclick="resetTh(3)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;">↺ Reset</button>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_min</label><span class="range-val" id="th3-zmin-val">2.0</span></div>
+                  <input type="range" id="th3-zmin" min="0.5" max="5" step="0.1" value="2.0"
+                         oninput="document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_max</label><span class="range-val" id="th3-zmax-val">10.0</span></div>
+                  <input type="range" id="th3-zmax" min="5" max="20" step="0.5" value="10.0"
+                         oninput="document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th3-win-val">80</span></div>
+                  <input type="range" id="th3-win" min="10" max="200" step="5" value="80"
+                         oninput="document.getElementById('th3-win-val').textContent=this.value;debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0;margin-top:8px;">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th3-recalc-val">1</span></div>
+                  <input type="range" id="th3-recalc" min="1" max="50" step="1" value="1"
+                         oninput="document.getElementById('th3-recalc-val').textContent=this.value;debounceTuner()">
+                </div>
+              </div>
+
+              <div class="card th-section" style="border-left:3px solid #7c3aed;padding:12px;">
+                <div class="th-title" style="color:#7c3aed;display:flex;justify-content:space-between;align-items:center;">
+                  🟣 TH4 — Entropy-lock
+                  <button onclick="resetTh(4)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #7c3aed;background:transparent;color:#7c3aed;cursor:pointer;">↺ Reset</button>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label><span class="range-val" id="th4-alpha-val">3.5</span></div>
+                  <input type="range" id="th4-alpha" min="1" max="7" step="0.1" value="3.5"
+                         oninput="document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Max window</label><span class="range-val" id="th4-win-val">150</span></div>
+                  <input type="range" id="th4-win" min="50" max="300" step="10" value="150"
+                         oninput="document.getElementById('th4-win-val').textContent=this.value;debounceTuner()">
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Consecutive violations</label><span class="range-val" id="th4-cons-val">5</span></div>
+                  <input type="range" id="th4-cons" min="2" max="20" step="1" value="5"
+                         oninput="document.getElementById('th4-cons-val').textContent=this.value;debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Entropy threshold θ</label><span class="range-val" id="th4-eth-val">0.95</span></div>
+                  <input type="range" id="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95"
+                         oninput="document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0;margin-top:8px;">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th4-recalc-val">1</span></div>
+                  <input type="range" id="th4-recalc" min="1" max="50" step="1" value="1"
+                         oninput="document.getElementById('th4-recalc-val').textContent=this.value;debounceTuner()">
+                </div>
+              </div>
+            </div>
+
+            <div class="tuner-chart">
+              <div id="tuner-raw-chart" style="margin-bottom:8px;"></div>
+              <div id="tuner-chart" style="min-height:380px;"></div>
+              <div id="tuner-stats" class="stats-row"></div>
+              <!-- Confusion matrix per threshold — updates on every tune -->
+              <div style="margin-top:14px;">
+                <div style="font-size:0.72rem;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+                  📋 Confusion Matrix (Point-Adjusted) — run ที่เลือก
+                </div>
+                <div id="tuner-cm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ── Train All template (lazy-mounted on first click) ─────────── -->
+<template id="tpl-trainall">
+<div class="tab-panel-tpl">
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px;">
+    <div class="card" style="flex:0 0 260px;padding:14px;">
+      <div class="section-title" style="margin-bottom:10px;">⚙ Hyperparams</div>
+      <div class="form-group"><label class="form-label">seq_len</label>
+        <input type="number" id="ta-seq-len" value="10" min="5" max="50" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">Epochs</label>
+        <input type="number" id="ta-epochs" value="30" min="5" max="200" step="5" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">Hidden</label>
+        <select id="ta-hidden">
+          <option value="8">8</option><option value="16" selected>16</option>
+          <option value="32">32</option><option value="64">64</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Layers</label>
+        <select id="ta-layers">
+          <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">LR</label>
+        <input type="number" id="ta-lr" value="0.005" step="0.0005" min="0.0001" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">Batch Size</label>
+        <select id="ta-batch">
+          <option value="32">32</option><option value="64" selected>64</option><option value="128">128</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">EWMA α</label>
+        <input type="number" id="ta-ewma" value="0.3" step="0.05" min="0.01" max="1" style="width:100%"></div>
+      <button class="btn btn-primary" id="ta-btn-train" onclick="startTrainAll()">🏋️ Train All Models</button>
+      <div id="ta-msg" style="font-size:0.73rem;color:var(--text-2);font-family:'JetBrains Mono',monospace;margin-top:6px;min-height:18px;"></div>
+    </div>
+
+    <div class="card" style="flex:1;min-width:0;padding:14px;">
+      <div class="section-title" style="margin-bottom:10px;">Training Progress</div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:4px 8px;color:var(--text-3);font-weight:500;">Model</th>
+            <th style="padding:4px 8px;color:var(--text-3);font-weight:500;">Status</th>
+            <th style="padding:4px 8px;color:var(--text-3);font-weight:500;min-width:120px;">Progress</th>
+            <th style="padding:4px 8px;color:var(--text-3);font-weight:500;">Loss</th>
+          </tr>
+        </thead>
+        <tbody id="ta-progress-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="ta-pca-section" style="display:none">
+    <div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
+        <div class="section-title" style="margin:0;">🧬 PCA Latent Space — All Models</div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+          <label class="form-label">Color by</label>
+          <select id="ta-color" onchange="loadAllPcas()">
+            <option value="run">Run ID</option>
+            <option value="type">Normal / Anomaly</option>
+          </select>
+        </div>
+      </div>
+      <div id="ta-pca-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;"></div>
+    </div>
+
+    <div class="card" style="padding:14px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <div class="section-title" style="margin:0;">🔍 Error + Threshold Inspector</div>
+        <div class="form-group" style="margin:0;min-width:160px;">
+          <label class="form-label">Model</label>
+          <select id="ta-inspect-model" onchange="loadModelError()"></select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:140px;">
+          <label class="form-label">Run</label>
+          <select id="ta-inspect-run" onchange="loadModelError()">
+            {% for r in all_runs %}<option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="ta-inspect-raw" style="margin-bottom:8px;"></div>
+      <div id="ta-inspect-err"></div>
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- ── Results template (lazy-mounted on first click) ───────────── -->
+<template id="tpl-results">
+<div class="tab-panel-tpl">
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="section-title" style="margin:0;">📊 Confusion Matrix — All Models × All Thresholds</div>
+      <button class="btn btn-primary" style="width:auto;padding:8px 18px;"
+              onclick="loadResultsTable(true)">↻ Recompute</button>
+      <span style="font-size:0.72rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;">
+        ใช้ threshold ปัจจุบันจาก Tuner — กด Recompute หลังปรับ threshold
+      </span>
+    </div>
+  </div>
+  <div id="results-content">
+    <div style="text-align:center;padding:48px;color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.8rem;">
+      Run 🏋️ Train All Models first, then come back here.
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- ── Grid Search template ─────────────────────────────────────── -->
+<template id="tpl-gridsearch">
+<div class="tab-panel-tpl">
+
+  <!-- Model params -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:10px;">⚙ Model params — เลือกค่าที่ต้องการ sweep</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">Architecture</div>
+        <div id="gs-arch-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          {% for m in model_choices %}
+          <span class="gs-chip gs-on" data-val="{{ m }}" onclick="gsTogChip(this)">{{ m }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">Hidden size</div>
+        <div id="gs-hidden-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <span class="gs-chip" data-val="8" onclick="gsTogChip(this)">8</span>
+          <span class="gs-chip gs-on" data-val="16" onclick="gsTogChip(this)">16</span>
+          <span class="gs-chip gs-on" data-val="32" onclick="gsTogChip(this)">32</span>
+          <span class="gs-chip" data-val="64" onclick="gsTogChip(this)">64</span>
+          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+      </div>
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">Seq len</div>
+        <div id="gs-seq-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="30" onclick="gsTogChip(this)">30</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+      </div>
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">Epochs</div>
+        <div id="gs-epochs-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip gs-on" data-val="30" onclick="gsTogChip(this)">30</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+      </div>
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">Learning rate</div>
+        <div id="gs-lr-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <span class="gs-chip gs-on" data-val="0.001" onclick="gsTogChip(this)">0.001</span>
+          <span class="gs-chip gs-on" data-val="0.005" onclick="gsTogChip(this)">0.005</span>
+          <span class="gs-chip" data-val="0.01" onclick="gsTogChip(this)">0.01</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.0001" min="0" style="width:68px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+      </div>
+
+      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
+        <div class="form-label">EWMA α</div>
+        <div id="gs-ewma-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <span class="gs-chip gs-on" data-val="0.2" onclick="gsTogChip(this)">0.2</span>
+          <span class="gs-chip gs-on" data-val="0.3" onclick="gsTogChip(this)">0.3</span>
+          <span class="gs-chip" data-val="0.5" onclick="gsTogChip(this)">0.5</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.05" min="0" max="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Threshold params -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:10px;">🎛 Threshold params — sweep values + fixed params</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+      <!-- TH1 -->
+      <div style="border:1px solid #fecaca;border-left:3px solid #ef4444;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#dc2626;font-family:'JetBrains Mono',monospace;">TH1 — Sliding Percentile</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+            <input type="checkbox" id="gs-en1" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <div class="form-label" style="margin-bottom:4px;">Sweep percentile values</div>
+        <div id="gs-th1-pct-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+          <span class="gs-chip" data-val="95" onclick="gsTogChip(this)">95</span>
+          <span class="gs-chip gs-on" data-val="97" onclick="gsTogChip(this)">97</span>
+          <span class="gs-chip gs-on" data-val="99" onclick="gsTogChip(this)">99</span>
+          <span class="gs-chip" data-val="99.5" onclick="gsTogChip(this)">99.5</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.1" min="50" max="100" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div class="form-label" style="margin-bottom:3px;">Mode</div>
+        <select id="gs-th1-mode" onchange="gsUpdateCombo()" style="margin-bottom:8px;font-size:0.75rem;">
+          <option value="sliding" selected>Sliding Window</option>
+          <option value="static">Static baseline</option>
+        </select>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th1-win">100</span></div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+          <input type="range" data-gssync="th1-win" min="20" max="300" step="10" value="100" oninput="gsSv('th1-win',this.value);gsSyncNum('th1-win',this.value)" style="flex:1;">
+          <input id="gs-n-th1-win" type="number" value="100" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th1-win',this.value);gsSyncRng('th1-win',this.value)">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Update every N</span><span id="gs-v-th1-recalc">10</span></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="range" data-gssync="th1-recalc" min="1" max="50" step="1" value="10" oninput="gsSv('th1-recalc',this.value);gsSyncNum('th1-recalc',this.value)" style="flex:1;">
+          <input id="gs-n-th1-recalc" type="number" value="10" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th1-recalc',this.value);gsSyncRng('th1-recalc',this.value)">
+        </div>
+      </div>
+
+      <!-- TH2 -->
+      <div style="border:1px solid #bfdbfe;border-left:3px solid #3b82f6;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#1d4ed8;font-family:'JetBrains Mono',monospace;">TH2 — Sliding μ + α·σ</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+            <input type="checkbox" id="gs-en2" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <div class="form-label" style="margin-bottom:4px;">Sweep α values</div>
+        <div id="gs-th2-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+          <span class="gs-chip" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
+          <span class="gs-chip gs-on" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+          <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
+          <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th2-win">80</span></div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+          <input type="range" data-gssync="th2-win" min="10" max="200" step="5" value="80" oninput="gsSv('th2-win',this.value);gsSyncNum('th2-win',this.value)" style="flex:1;">
+          <input id="gs-n-th2-win" type="number" value="80" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th2-win',this.value);gsSyncRng('th2-win',this.value)">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Recalc every N</span><span id="gs-v-th2-recalc">50</span></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="range" data-gssync="th2-recalc" min="1" max="100" step="5" value="50" oninput="gsSv('th2-recalc',this.value);gsSyncNum('th2-recalc',this.value)" style="flex:1;">
+          <input id="gs-n-th2-recalc" type="number" value="50" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th2-recalc',this.value);gsSyncRng('th2-recalc',this.value)">
+        </div>
+      </div>
+
+      <!-- TH3 -->
+      <div style="border:1px solid #bbf7d0;border-left:3px solid #10b981;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#047857;font-family:'JetBrains Mono',monospace;">TH3 — Adaptive-z</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+            <input type="checkbox" id="gs-en3" onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <div class="form-label" style="margin-bottom:4px;">Sweep z_min values</div>
+        <div id="gs-th3-zmin-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+          <span class="gs-chip gs-on" data-val="1.5" onclick="gsTogChip(this)">1.5</span>
+          <span class="gs-chip gs-on" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
+          <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th3-win">80</span></div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+          <input type="range" data-gssync="th3-win" min="10" max="200" step="5" value="80" oninput="gsSv('th3-win',this.value);gsSyncNum('th3-win',this.value)" style="flex:1;">
+          <input id="gs-n-th3-win" type="number" value="80" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th3-win',this.value);gsSyncRng('th3-win',this.value)">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Update every N</span><span id="gs-v-th3-recalc">1</span></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="range" data-gssync="th3-recalc" min="1" max="50" step="1" value="1" oninput="gsSv('th3-recalc',this.value);gsSyncNum('th3-recalc',this.value)" style="flex:1;">
+          <input id="gs-n-th3-recalc" type="number" value="1" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th3-recalc',this.value);gsSyncRng('th3-recalc',this.value)">
+        </div>
+      </div>
+
+      <!-- TH4 -->
+      <div style="border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono',monospace;">TH4 — Entropy-lock</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+            <input type="checkbox" id="gs-en4" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <div class="form-label" style="margin-bottom:4px;">Sweep α values</div>
+        <div id="gs-th4-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+          <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+          <span class="gs-chip gs-on" data-val="3.0" onclick="gsTogChip(this)">3.0</span>
+          <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
+          <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
+          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Max window</span><span id="gs-v-th4-win">150</span></div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+          <input type="range" data-gssync="th4-win" min="50" max="400" step="10" value="150" oninput="gsSv('th4-win',this.value);gsSyncNum('th4-win',this.value)" style="flex:1;">
+          <input id="gs-n-th4-win" type="number" value="150" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-win',this.value);gsSyncRng('th4-win',this.value)">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Entropy θ</span><span id="gs-v-th4-eth">0.95</span></div>
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
+          <input type="range" data-gssync="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95" oninput="gsSv('th4-eth',parseFloat(this.value).toFixed(2));gsSyncNum('th4-eth',parseFloat(this.value).toFixed(2))" style="flex:1;">
+          <input id="gs-n-th4-eth" type="number" value="0.95" step="0.01" min="0" max="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-eth',parseFloat(this.value).toFixed(2));gsSyncRng('th4-eth',this.value)">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Consecutive violations</span><span id="gs-v-th4-cons">5</span></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="range" data-gssync="th4-cons" min="1" max="20" step="1" value="5" oninput="gsSv('th4-cons',this.value);gsSyncNum('th4-cons',this.value)" style="flex:1;">
+          <input id="gs-n-th4-cons" type="number" value="5" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-cons',this.value);gsSyncRng('th4-cons',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run bar -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;">
+    <div>
+      <div style="font-size:0.68rem;color:var(--text-3);margin-bottom:2px;">Combinations</div>
+      <div id="gs-combo-count" style="font-size:1.3rem;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;">—</div>
+    </div>
+    <div style="height:36px;width:1px;background:var(--border);"></div>
+
+    <div class="form-group" style="margin:0;min-width:170px;">
+      <label class="form-label">Search mode</label>
+      <select id="gs-search-mode" onchange="gsOnModeChange()" style="font-size:0.75rem;">
+        <option value="grid">Grid — ลองทุก combo</option>
+        <option value="random">Random — สุ่ม N combo</option>
+        <option value="optuna">Optuna Bayesian ✦</option>
+      </select>
+    </div>
+
+    <div id="gs-n-trials-wrap" style="display:none;min-width:120px;">
+      <div class="form-label">จำนวน trials</div>
+      <input id="gs-n-trials" type="number" value="30" min="5" max="500" style="font-size:0.75rem;padding:5px 8px;">
+    </div>
+
+    <div class="form-group" style="margin:0;min-width:160px;">
+      <label class="form-label">Scoring</label>
+      <select id="gs-scoring" style="font-size:0.75rem;">
+        <option value="mean_f1">Mean F1</option>
+        <option value="f1_recall">0.6×F1 + 0.4×Recall</option>
+        <option value="recall">Recall (miss-averse)</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="margin:0;min-width:110px;">
+      <label class="form-label">Error agg</label>
+      <select id="gs-agg" style="font-size:0.75rem;">
+        <option value="max" selected>Max</option>
+        <option value="mean">Mean</option>
+        <option value="l2">L2 Norm</option>
+      </select>
+    </div>
+
+    <div style="font-size:0.68rem;color:var(--text-3);background:var(--bg-2);padding:5px 10px;border-radius:5px;border:1px solid var(--border);max-width:220px;line-height:1.5;">
+      ⚠️ คะแนนคำนวณจาก<br>
+      <b style="color:var(--red);">Anomaly runs เท่านั้น</b><br>
+      Normal runs ใช้แค่ calibrate threshold
+    </div>
+
+    <div id="gs-warn" style="display:none;font-size:0.7rem;color:#dc2626;background:#fef2f2;padding:4px 10px;border-radius:5px;border:1px solid #fecaca;"></div>
+    <button id="gs-run-btn" class="btn btn-primary" style="width:auto;padding:8px 22px;margin-left:auto;" onclick="gsStart()">Run grid search</button>
+  </div>
+
+  <!-- Progress -->
+  <div id="gs-prog-panel" class="card" style="padding:14px;display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Progress</div>
+      <div id="gs-prog-count" style="font-size:0.75rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;"></div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.73rem;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">#</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Arch</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">H</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Seq</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">LR</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Threshold</th>
+          <th style="padding:4px 7px;min-width:80px;color:var(--text-3);font-weight:400;">Progress</th>
+          <th style="padding:4px 7px;text-align:center;color:var(--text-3);font-weight:400;">F1</th>
+          <th style="padding:4px 7px;text-align:center;color:var(--text-3);font-weight:400;">Recall</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Status</th>
+        </tr></thead>
+        <tbody id="gs-prog-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="gs-results-panel" style="display:none;">
+    <div class="card" style="padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <div class="section-title" style="margin:0;">📊 Ranking — F1 Score</div>
+        <button onclick="gsCSV()" style="margin-left:auto;padding:5px 14px;border-radius:5px;border:1px solid var(--border);background:var(--bg);font-size:0.72rem;cursor:pointer;color:var(--text-2);">⬇ Save CSV</button>
+      </div>
+      <div id="gs-rank-chart"></div>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:10px;">
+      <div class="section-title" style="margin-bottom:10px;">📋 All results</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+          <thead><tr style="background:var(--bg-1);border-bottom:2px solid var(--border);">
+            <th style="padding:5px 8px;text-align:left;">#</th>
+            <th style="padding:5px 8px;text-align:left;">Arch</th>
+            <th style="padding:5px 8px;">H</th>
+            <th style="padding:5px 8px;">Seq</th>
+            <th style="padding:5px 8px;">Epochs</th>
+            <th style="padding:5px 8px;">LR</th>
+            <th style="padding:5px 8px;">EWMA</th>
+            <th style="padding:5px 8px;text-align:left;">Threshold</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">P</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">R</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">F1★</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">Acc</th>
+            <th style="padding:5px 8px;text-align:center;background:#faf5ff;">Seg</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:700;">Score</th>
+          </tr></thead>
+          <tbody id="gs-result-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Best model charts -->
+    <div id="gs-best-chart-panel" class="card" style="padding:14px;display:none;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="section-title" style="margin:0;">🏆 Best model — chart preview</div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+          <label class="form-label">Run</label>
+          <select id="gs-best-run" onchange="gsLoadBestCharts()">
+            {% for r in all_runs %}
+              <option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="gs-best-summary" style="margin-bottom:10px;"></div>
+      <div id="gs-best-raw" style="margin-bottom:8px;"></div>
+      <div id="gs-best-th"></div>
+    </div>
+  </div>
+
+</div>
+</template>
+<script>
+const ANOMALY_RUNS = {{ anomaly_runs|safe }};
+const ALL_RUNS     = {{ all_runs|safe }};
+const MODEL_LIST   = {{ model_choices|safe }};
+</script>
+
+<!-- ── App JS (order matters) ───────────────────────────────────── -->
+<script src="{% static 'dashboard/js/state.js' %}"></script>
+<script src="{% static 'dashboard/js/tabs.js' %}"></script>
+<script src="{% static 'dashboard/js/training.js' %}"></script>
+<script src="{% static 'dashboard/js/train_all.js' %}"></script>
+<script src="{% static 'dashboard/js/charts.js' %}"></script>
+<script src="{% static 'dashboard/js/results.js' %}"></script>
+<script src="{% static 'dashboard/js/grid_search.js' %}"></script>
+
+<script>
+// ── Agg method hints ──────────────────────────────────────────────
+const AGG_HINTS = {
+  mean: 'Mean — ค่าเฉลี่ย 4 sensors, anomaly 1 ตัวถูก dilute ÷4',
+  max:  'Max — sensor ใดผิดปกติ โผล่ขึ้นทันที ไม่ถูก dilute ✓',
+  l2:   'L2 Norm — Euclidean, ขยาย outlier ด้วย squaring',
+};
+
+function onAggChange() {
+  const v = document.getElementById('agg-method').value;
+  document.getElementById('agg-hint').textContent = AGG_HINTS[v] || '';
+  // Invalidate results cache (different agg = different metrics)
+  RESULTS_CACHE = null; RESULTS_CACHE_KEY = null;
+  // Reload active tab
+  _reloadActiveTab();
+}
+
+function onLabelsChange() {
+  _reloadActiveTab();
+}
+
+function _reloadActiveTab() {
+  const active = document.querySelector('.tab-btn.active');
+  if (!active) return;
+  const name = active.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+  if (!name) return;
+  if (name === 'inspector') loadInspector();
+  if (name === 'anomaly')   loadAnomalyCharts();
+  if (name === 'tuner')     loadTuner();
+  if (name === 'trainall')  loadModelError();
+}
+</script>
+
+</body>
+</html>
