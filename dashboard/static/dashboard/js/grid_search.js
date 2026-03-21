@@ -57,26 +57,31 @@ function gsBuildBaseCfg() {
     th1_pct:    gsSliderVal('gs-th1-pct') || 99.0,
     th1_mode:   gsSelectVal('gs-th1-mode'),
     th1_win:    gsFirstChipVal('gs-th1-win-group', 100),
-    th1_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th1_recalc: gsFirstChipVal('gs-th1-recalc-group', 10),
     th2_alpha:  3.5,
     th2_win:    gsFirstChipVal('gs-th2-win-group', 80),
-    th2_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th2_recalc: gsFirstChipVal('gs-th2-recalc-group', 10),
     th3_zmin:   2.0,
     th3_zmax:   gsFirstChipVal('gs-th3-zmax-group', 10.0),
     th3_win:    gsFirstChipVal('gs-th3-win-group', 80),
-    th3_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th3_recalc: gsFirstChipVal('gs-th3-recalc-group', 10),
     th4_alpha:  3.5,
     th4_win:    gsFirstChipVal('gs-th4-win-group', 150),
     th4_cons:   gsFirstChipVal('gs-th4-cons-group', 5),
     th4_eth:    gsFirstChipVal('gs-th4-eth-group', 0.95),
-    th4_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th4_recalc: gsFirstChipVal('gs-th4-recalc-group', 10),
   };
 }
 
 // ── Build th_configs: sweep chips × fixed base ─────────────────────
 function gsBuildThConfigs() {
   const configs = [];
-  const recalcVals = gsChipValues('gs-recalc-group') || ['10'];
+
+  // Per-threshold recalc arrays — each sweeps independently
+  const r1s = gsChipValues('gs-th1-recalc-group') || ['10'];
+  const r2s = gsChipValues('gs-th2-recalc-group') || ['10'];
+  const r3s = gsChipValues('gs-th3-recalc-group') || ['10'];
+  const r4s = gsChipValues('gs-th4-recalc-group') || ['10'];
 
   if (document.getElementById('gs-en1')?.checked) {
     const pcts = gsChipValues('gs-th1-pct-group') || ['99'];
@@ -84,33 +89,37 @@ function gsBuildThConfigs() {
     const mode = gsSelectVal('gs-th1-mode');
     for (const pct of pcts) {
       for (const win of wins) {
-        for (const rec of recalcVals) {
+        for (const r1 of r1s) {
           configs.push({
-            name: `TH1 P${parseFloat(pct)} w${win}`,
+            name: `TH1 P${parseFloat(pct)} w${win} r${parseFloat(r1)}`,
             th_type: 'P99 Static',
-            cfg: {...gsBuildBaseCfg(), th1_pct: parseFloat(pct), th1_mode: mode,
-                  th1_win: parseFloat(win), th1_recalc: parseFloat(rec)},
+            cfg: { ...gsBuildBaseCfg(),
+              th1_pct: parseFloat(pct), th1_mode: mode,
+              th1_win: parseFloat(win), th1_recalc: parseFloat(r1) },
           });
         }
       }
     }
   }
+
   if (document.getElementById('gs-en2')?.checked) {
     const alphas = gsChipValues('gs-th2-alpha-group') || ['3.5'];
     const wins   = gsChipValues('gs-th2-win-group')   || ['80'];
     for (const a of alphas) {
       for (const win of wins) {
-        for (const rec of recalcVals) {
+        for (const r2 of r2s) {
           configs.push({
-            name: `TH2 α${parseFloat(a)} w${win}`,
+            name: `TH2 α${parseFloat(a)} w${win} r${parseFloat(r2)}`,
             th_type: 'Sliding Mu+αStd',
-            cfg: {...gsBuildBaseCfg(), th2_alpha: parseFloat(a),
-                  th2_win: parseFloat(win), th2_recalc: parseFloat(rec)},
+            cfg: { ...gsBuildBaseCfg(),
+              th2_alpha: parseFloat(a),
+              th2_win: parseFloat(win), th2_recalc: parseFloat(r2) },
           });
         }
       }
     }
   }
+
   if (document.getElementById('gs-en3')?.checked) {
     const zmins = gsChipValues('gs-th3-zmin-group') || ['2.0'];
     const zmaxs = gsChipValues('gs-th3-zmax-group') || ['10.0'];
@@ -118,18 +127,20 @@ function gsBuildThConfigs() {
     for (const zmin of zmins) {
       for (const zmax of zmaxs) {
         for (const win of wins) {
-          for (const rec of recalcVals) {
+          for (const r3 of r3s) {
             configs.push({
-              name: `TH3 z${parseFloat(zmin)}-${parseFloat(zmax)} w${win}`,
+              name: `TH3 z${parseFloat(zmin)}-${parseFloat(zmax)} w${win} r${parseFloat(r3)}`,
               th_type: 'Adaptive-z',
-              cfg: {...gsBuildBaseCfg(), th3_zmin: parseFloat(zmin),
-                    th3_zmax: parseFloat(zmax), th3_win: parseFloat(win), th3_recalc: parseFloat(rec)},
+              cfg: { ...gsBuildBaseCfg(),
+                th3_zmin: parseFloat(zmin), th3_zmax: parseFloat(zmax),
+                th3_win: parseFloat(win),   th3_recalc: parseFloat(r3) },
             });
           }
         }
       }
     }
   }
+
   if (document.getElementById('gs-en4')?.checked) {
     const alphas = gsChipValues('gs-th4-alpha-group') || ['3.5'];
     const wins   = gsChipValues('gs-th4-win-group')   || ['150'];
@@ -139,13 +150,14 @@ function gsBuildThConfigs() {
       for (const win of wins) {
         for (const cons of conss) {
           for (const eth of eths) {
-            for (const rec of recalcVals) {
+            for (const r4 of r4s) {
               configs.push({
-                name: `TH4 α${parseFloat(a)} w${win}`,
+                name: `TH4 α${parseFloat(a)} w${win} c${parseFloat(cons)} r${parseFloat(r4)}`,
                 th_type: 'Entropy-lock',
-                cfg: {...gsBuildBaseCfg(), th4_alpha: parseFloat(a),
-                      th4_win: parseFloat(win), th4_cons: parseFloat(cons),
-                      th4_eth: parseFloat(eth), th4_recalc: parseFloat(rec)},
+                cfg: { ...gsBuildBaseCfg(),
+                  th4_alpha: parseFloat(a), th4_win: parseFloat(win),
+                  th4_cons: parseFloat(cons), th4_eth: parseFloat(eth),
+                  th4_recalc: parseFloat(r4) },
               });
             }
           }
@@ -153,12 +165,13 @@ function gsBuildThConfigs() {
       }
     }
   }
-  return configs.length ? configs : [{name:'P99 Static',th_type:'P99 Static',cfg:gsBuildBaseCfg()}];
+
+  return configs.length ? configs : [{name:'P99 Static', th_type:'P99 Static', cfg:gsBuildBaseCfg()}];
 }
 
 // ── Mode change: show/hide n_trials ───────────────────────────────
 function gsOnModeChange() {
-  const mode = gsSelectVal('gs-search-mode');
+  const mode = document.getElementById('gs-search-mode')?.value;
   const wrap = document.getElementById('gs-n-trials-wrap');
   if (wrap) wrap.style.display = (mode === 'random' || mode === 'optuna') ? 'block' : 'none';
   gsUpdateCombo();
@@ -346,6 +359,9 @@ function gsRenderResults(data) {
   const medals = ['🥇','🥈','🥉'];
   document.getElementById('gs-result-tbody').innerHTML = done.map((c,i) => {
     const isBest = c.id === bestId;
+    // Extract recalc from th_name (format: "... rN")
+    const recalcMatch = c.th_name.match(/r(\d+(?:\.\d+)?)$/);
+    const recalcN = recalcMatch ? recalcMatch[1] : '—';
     return `<tr style="${isBest?'background:#eff6ff;':''}">
       <td style="padding:5px 8px;color:var(--text-3);">${medals[i]||i+1}</td>
       <td style="padding:5px 8px;font-weight:${isBest?600:400};">${isBest?'🏆 ':''}${c.arch}</td>
@@ -354,7 +370,8 @@ function gsRenderResults(data) {
       <td style="padding:5px 8px;">${c.epochs}</td>
       <td style="padding:5px 8px;">${c.lr}</td>
       <td style="padding:5px 8px;">${c.ewma}</td>
-      <td style="padding:5px 8px;font-size:0.7rem;">${c.th_name}</td>
+      <td style="padding:5px 8px;font-size:0.7rem;max-width:130px;overflow:hidden;text-overflow:ellipsis;" title="${c.th_name}">${c.th_name}</td>
+      <td style="padding:5px 8px;text-align:center;color:var(--text-3);">${recalcN}</td>
       <td style="padding:5px 8px;">${((c.precision||0)*100).toFixed(1)}%</td>
       <td style="padding:5px 8px;">${((c.recall||0)*100).toFixed(1)}%</td>
       <td style="padding:5px 8px;font-weight:600;color:${(c.f1||0)>=0.8?'#16a34a':(c.f1||0)>=0.6?'#d97706':'#dc2626'};">${((c.f1||0)*100).toFixed(1)}%</td>
@@ -403,10 +420,11 @@ function gsCSV() {
     .then(r => r.json())
     .then(data => {
       const done = data.combos.filter(c => c.status==='done').sort((a,b)=>(b.score||0)-(a.score||0));
-      const hdr  = ['rank','arch','hidden','seq_len','epochs','lr','ewma','th_name','precision','recall','f1','accuracy','seg_det','seg_total','score'];
+      const hdr  = ['rank','arch','hidden','seq_len','epochs','lr','ewma','th_name','recalc_n','precision','recall','f1','accuracy','seg_det','seg_total','score'];
       const rows = [hdr.join(','), ...done.map((c,i) => [
         i+1, `"${c.arch}"`, c.hidden, c.seq_len, c.epochs, c.lr, c.ewma,
         `"${c.th_name}"`,
+        (c.th_name.match(/r(\d+(?:\.\d+)?)$/)||['','—'])[1],
         ((c.precision||0)*100).toFixed(1), ((c.recall||0)*100).toFixed(1),
         ((c.f1||0)*100).toFixed(1), ((c.accuracy||0)*100).toFixed(1),
         c.n_detected_segs||0, c.n_segments||0, ((c.score||0)*100).toFixed(1),

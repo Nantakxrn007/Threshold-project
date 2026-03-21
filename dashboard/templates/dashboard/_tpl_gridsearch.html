@@ -95,20 +95,72 @@
     </div>
   </div>
 
-  <!-- Shared recalc -->
+  <!-- Per-threshold recalc -->
   <div class="card" style="padding:14px;margin-bottom:10px;">
-    <div class="section-title" style="margin-bottom:4px;">🔄 Update every N pts — ใช้กับทุก threshold</div>
-    <div class="gs-note">threshold ทุกแบบใช้ค่านี้ร่วมกัน — <b>น้อย</b>=smooth บ่อย แต่ช้า | <b>มาก</b>=เส้นขั้นบันได เร็วกว่า</div>
-    <div id="gs-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
-      <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
-      <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
-      <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
-      <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
-      <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
-    </div>
-    <div class="gs-add-row">
-      <input type="number" id="gs-add-recalc" placeholder="เพิ่มค่า" min="1" step="1">
-      <button class="gs-add-btn" onclick="gsAddChip('gs-recalc-group','gs-add-recalc')">+ Add</button>
+    <div class="section-title" style="margin-bottom:4px;">🔄 Update every N pts — ตั้งค่าแยกแต่ละ threshold</div>
+    <div class="gs-note"><b>น้อย</b>=คำนวณ threshold ใหม่บ่อย smooth กว่า แต่ช้า | <b>มาก</b>=เส้นขั้นบันได เร็วกว่า | แต่ละ threshold sweep อิสระ ไม่ขึ้นกัน</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+
+      <div style="border:1px solid #fecaca;border-left:3px solid #ef4444;border-radius:0 var(--radius) var(--radius) 0;padding:9px 11px;background:var(--bg-1);">
+        <div class="gs-plabel" style="color:#dc2626;margin-bottom:4px;">🔴 TH1 recalc</div>
+        <div id="gs-th1-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+          <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th1recalc" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th1-recalc-group','gs-add-th1recalc')">+ Add</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid #bfdbfe;border-left:3px solid #3b82f6;border-radius:0 var(--radius) var(--radius) 0;padding:9px 11px;background:var(--bg-1);">
+        <div class="gs-plabel" style="color:#1d4ed8;margin-bottom:4px;">🔵 TH2 recalc</div>
+        <div id="gs-th2-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+          <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th2recalc" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th2-recalc-group','gs-add-th2recalc')">+ Add</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid #bbf7d0;border-left:3px solid #10b981;border-radius:0 var(--radius) var(--radius) 0;padding:9px 11px;background:var(--bg-1);">
+        <div class="gs-plabel" style="color:#047857;margin-bottom:4px;">🟢 TH3 recalc</div>
+        <div id="gs-th3-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+          <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th3recalc" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-recalc-group','gs-add-th3recalc')">+ Add</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:0 var(--radius) var(--radius) 0;padding:9px 11px;background:var(--bg-1);">
+        <div class="gs-plabel" style="color:#5b21b6;margin-bottom:4px;">🟣 TH4 recalc</div>
+        <div id="gs-th4-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+          <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th4recalc" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-recalc-group','gs-add-th4recalc')">+ Add</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -408,6 +460,7 @@
             <th style="padding:5px 8px;">LR</th>
             <th style="padding:5px 8px;">EWMA</th>
             <th style="padding:5px 8px;text-align:left;">Threshold</th>
+            <th style="padding:5px 8px;text-align:center;color:var(--text-3);font-size:0.65rem;" title="Update every N pts for this threshold">Recalc N</th>
             <th style="padding:5px 8px;text-align:center;background:#eff6ff;">P</th>
             <th style="padding:5px 8px;text-align:center;background:#eff6ff;">R</th>
             <th style="padding:5px 8px;text-align:center;background:#eff6ff;">F1★</th>
