@@ -645,3 +645,4 @@ def api_results_table(request):
 
     return JsonResponse({"rows": table_rows, "has_labels": has_labels,
                          "runs": ALL_RUNS, "normal_runs": NORMAL_RUNS})
+

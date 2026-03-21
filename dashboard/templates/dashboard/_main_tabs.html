@@ -1,0 +1,327 @@
+      <!-- ── Tab: UMAP ────────────────────────────────────────────── -->
+      <div id="tab-umap" class="tab-panel active">
+        <div class="card">
+          <div class="section-title">Latent Space Projection</div>
+          <p class="hint">Normal กับ Anomaly ควรแยกกลุ่มถ้าโมเดล learn ได้ดี (Default = PCA เพราะเร็วกว่า)</p>
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label">Method</label>
+              <select id="umap-method" onchange="toggleUmapParams()">
+                <option value="pca" selected>PCA (Fast)</option>
+                <option value="umap">UMAP (Detailed)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label" id="label-nn" style="opacity:0.4;">n_neighbors</label>
+              <input type="range" id="umap-nn" min="5" max="50" value="15" disabled
+                     oninput="document.getElementById('unn-val').textContent=this.value">
+              <div class="range-row" id="row-nn" style="opacity:0.4;"><span></span><span class="range-val" id="unn-val">15</span></div>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label" id="label-md" style="opacity:0.4;">min_dist</label>
+              <input type="range" id="umap-md" min="0.01" max="0.99" step="0.01" value="0.1" disabled
+                     oninput="document.getElementById('umd-val').textContent=parseFloat(this.value).toFixed(2)">
+              <div class="range-row" id="row-md" style="opacity:0.4;"><span></span><span class="range-val" id="umd-val">0.10</span></div>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px;">
+              <label class="form-label">Color by</label>
+              <select id="umap-color">
+                <option value="run">Run ID</option>
+                <option value="type">Normal / Anomaly</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-recompute" style="width:auto;padding:8px 18px;" onclick="loadUmap()">↻ Recompute</button>
+          </div>
+          <div id="umap-chart"></div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Inspector ───────────────────────────────────────── -->
+      <div id="tab-inspector" class="tab-panel">
+        <div class="card">
+          <div class="inspector-header">
+            <div class="section-title" style="margin:0">🔗 Linked Run Inspector</div>
+            <select id="inspect-run" style="width:160px" onchange="loadInspector()">
+              {% for r in all_runs %}<option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>{% endfor %}
+            </select>
+            <span class="inspector-hint">↔ Hover Raw Data → vline syncs to all 3 charts</span>
+          </div>
+          <div id="inspect-umap-chart"></div>
+          <div style="height:8px;"></div>
+          <div id="inspect-raw-chart"></div>
+          <div style="height:8px;"></div>
+          <div id="inspect-err-chart"></div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Anomalies ───────────────────────────────────────── -->
+      <div id="tab-anomaly" class="tab-panel">
+        <div class="section-title">🚨 Anomaly Detection Results</div>
+        <p class="hint" style="margin-bottom:16px;">ปรับ parameter ได้ใน Threshold Tuner</p>
+        <div id="anomaly-charts">
+          <div class="card" style="color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.8rem;padding:32px;text-align:center;">
+            Train a model first to see anomaly results.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab: Threshold Tuner ─────────────────────────────────── -->
+      <div id="tab-tuner" class="tab-panel">
+        <div class="card">
+          <div class="section-title">🎛 Threshold Parameter Tuner</div>
+          <p class="hint">ปรับ slider หรือพิมพ์ตัวเลขโดยตรง → กราฟ update ทันที ไม่ต้อง retrain<br>
+          หลังปรับแล้ว ไปหน้า 📊 Results กด ↻ Recompute เพื่อดูผลใหม่</p>
+          <div class="tuner-wrap">
+            <div class="tuner-controls">
+
+              <div class="form-group">
+                <label class="form-label">Run to tune on</label>
+                <select id="tuner-run" onchange="loadTuner()">
+                  {% for r in all_runs %}<option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+              </div>
+
+              <!-- TH1 -->
+              <div class="card th-section" style="border-left:3px solid #ef4444;padding:12px;">
+                <div class="th-title" style="color:#ef4444;display:flex;justify-content:space-between;align-items:center;">
+                  🔴 TH1 — Sliding Percentile
+                  <button onclick="resetTh(1)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;cursor:pointer;">↺ Reset</button>
+                </div>
+                <p class="param-desc" style="margin-bottom:8px;">ใช้ percentile ของ error ใน window ก่อนหน้าเป็น threshold — สูง = conservative (จับน้อย), ต่ำ = sensitive (จับมาก)</p>
+
+                <div class="form-group" style="margin-bottom:8px;">
+                  <label class="form-label">Mode</label>
+                  <select id="th1-mode" onchange="_toggleTh1SlidingParams();debounceTuner()" style="font-size:0.78rem;">
+                    <option value="sliding" selected>Sliding Window (Realistic)</option>
+                    <option value="static">Static (Normal baseline)</option>
+                  </select>
+                  <div class="param-desc">Sliding = คำนวณจากข้อมูลก่อนหน้า N จุด ไม่ใช้ future data</div>
+                </div>
+
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Percentile</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th1-pct-val">99.0</span>
+                      <input type="number" id="th1-pct-n" value="99.0" min="50" max="99.9" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th1-pct').value=this.value;document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th1-pct" min="90" max="99.9" step="0.1" value="99.0"
+                         oninput="document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th1-pct-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">P99 = threshold ที่ 99% ของ normal error อยู่ต่ำกว่า</div>
+                </div>
+
+                <div id="th1-sliding-params">
+                  <div class="form-group">
+                    <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                      <div style="display:flex;gap:4px;align-items:center;">
+                        <span class="range-val" id="th1-win-val">100</span>
+                        <input type="number" id="th1-win-n" value="100" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                               oninput="document.getElementById('th1-win').value=this.value;document.getElementById('th1-win-val').textContent=this.value;debounceTuner()">
+                      </div>
+                    </div>
+                    <input type="range" id="th1-win" min="20" max="500" step="10" value="100"
+                           oninput="document.getElementById('th1-win-val').textContent=this.value;document.getElementById('th1-win-n').value=this.value;debounceTuner()">
+                    <div class="param-desc">จำนวน data points ที่มองย้อนหลัง — ใหญ่ = stable แต่ตอบสนองช้า</div>
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                      <div style="display:flex;gap:4px;align-items:center;">
+                        <span class="range-val" id="th1-recalc-val">10</span>
+                        <input type="number" id="th1-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                               oninput="document.getElementById('th1-recalc').value=this.value;document.getElementById('th1-recalc-val').textContent=this.value;debounceTuner()">
+                      </div>
+                    </div>
+                    <input type="range" id="th1-recalc" min="1" max="100" step="1" value="10"
+                           oninput="document.getElementById('th1-recalc-val').textContent=this.value;document.getElementById('th1-recalc-n').value=this.value;debounceTuner()">
+                    <div class="param-desc">คำนวณ threshold ใหม่ทุก N จุด — 1 = smooth สุด แต่ช้ากว่า</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TH2 -->
+              <div class="card th-section" style="border-left:3px solid #3b82f6;padding:12px;">
+                <div class="th-title" style="color:#3b82f6;display:flex;justify-content:space-between;align-items:center;">
+                  🔵 TH2 — Sliding μ + α·σ
+                  <button onclick="resetTh(2)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;">↺ Reset</button>
+                </div>
+                <p class="param-desc" style="margin-bottom:8px;">threshold = mean + α × std ของ error ใน window ก่อนหน้า — ปรับตามความผันผวนของสัญญาณอัตโนมัติ</p>
+
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-alpha-val">3.5</span>
+                      <input type="number" id="th2-alpha-n" value="3.5" min="0.5" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-alpha').value=this.value;document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-alpha" min="0.5" max="10" step="0.1" value="3.5"
+                         oninput="document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th2-alpha-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">สูง = conservative (ต้องเกินค่าเฉลี่ยไปมากๆ ถึงจะ flag)</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-win-val">80</span>
+                      <input type="number" id="th2-win-n" value="80" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-win').value=this.value;document.getElementById('th2-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-win" min="10" max="500" step="5" value="80"
+                         oninput="document.getElementById('th2-win-val').textContent=this.value;document.getElementById('th2-win-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">ขนาด sliding window สำหรับคำนวณ μ และ σ</div>
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-recalc-val">50</span>
+                      <input type="number" id="th2-recalc-n" value="50" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-recalc').value=this.value;document.getElementById('th2-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-recalc" min="1" max="200" step="5" value="50"
+                         oninput="document.getElementById('th2-recalc-val').textContent=this.value;document.getElementById('th2-recalc-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">คำนวณ μ/σ ใหม่ทุก N จุด — น้อย = ตามทัน แต่ช้ากว่า</div>
+                </div>
+              </div>
+
+              <!-- TH3 -->
+              <div class="card th-section" style="border-left:3px solid #10b981;padding:12px;">
+                <div class="th-title" style="color:#10b981;display:flex;justify-content:space-between;align-items:center;">
+                  🟢 TH3 — Adaptive-z
+                  <button onclick="resetTh(3)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;">↺ Reset</button>
+                </div>
+                <p class="param-desc" style="margin-bottom:8px;">ปรับ z-score multiplier อัตโนมัติตาม anomaly density ที่ตรวจเจอใน window — ไม่ต้องตั้ง α เอง</p>
+
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_min (ต่ำสุด)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-zmin-val">2.0</span>
+                      <input type="number" id="th3-zmin-n" value="2.0" min="0.1" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-zmin').value=this.value;document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-zmin" min="0.5" max="10" step="0.1" value="2.0"
+                         oninput="document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th3-zmin-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">z ต่ำสุดที่ยอมให้ — ป้องกันไม่ให้ threshold ต่ำเกินไป</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_max (สูงสุด)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-zmax-val">10.0</span>
+                      <input type="number" id="th3-zmax-n" value="10.0" min="1" max="50" step="0.5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-zmax').value=this.value;document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-zmax" min="2" max="30" step="0.5" value="10.0"
+                         oninput="document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th3-zmax-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">z สูงสุดที่ยอมให้ — ป้องกันไม่ให้ threshold สูงเกินจนจับไม่ได้</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-win-val">80</span>
+                      <input type="number" id="th3-win-n" value="80" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-win').value=this.value;document.getElementById('th3-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-win" min="10" max="500" step="5" value="80"
+                         oninput="document.getElementById('th3-win-val').textContent=this.value;document.getElementById('th3-win-n').value=this.value;debounceTuner()">
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-recalc-val">10</span>
+                      <input type="number" id="th3-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-recalc').value=this.value;document.getElementById('th3-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-recalc" min="1" max="100" step="1" value="10"
+                         oninput="document.getElementById('th3-recalc-val').textContent=this.value;document.getElementById('th3-recalc-n').value=this.value;debounceTuner()">
+                </div>
+              </div>
+
+              <!-- TH4 -->
+              <div class="card th-section" style="border-left:3px solid #7c3aed;padding:12px;">
+                <div class="th-title" style="color:#7c3aed;display:flex;justify-content:space-between;align-items:center;">
+                  🟣 TH4 — Entropy-lock
+                  <button onclick="resetTh(4)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #7c3aed;background:transparent;color:#7c3aed;cursor:pointer;">↺ Reset</button>
+                </div>
+                <p class="param-desc" style="margin-bottom:8px;">lock window size เมื่อ entropy ของ error distribution นิ่งพอ — ไม่ให้ window ขยายออกไปเรื่อยๆ จน threshold หลวม</p>
+
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-alpha-val">3.5</span>
+                      <input type="number" id="th4-alpha-n" value="3.5" min="0.5" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-alpha').value=this.value;document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-alpha" min="0.5" max="10" step="0.1" value="3.5"
+                         oninput="document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th4-alpha-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">เหมือน TH2 — μ + α·σ ของ window ที่ lock</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Max window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-win-val">150</span>
+                      <input type="number" id="th4-win-n" value="150" min="1" step="10" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-win').value=this.value;document.getElementById('th4-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-win" min="20" max="500" step="10" value="150"
+                         oninput="document.getElementById('th4-win-val').textContent=this.value;document.getElementById('th4-win-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">window ขยายได้สูงสุด N จุด ก่อน entropy lock ทำงาน</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Consecutive violations</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-cons-val">5</span>
+                      <input type="number" id="th4-cons-n" value="5" min="1" max="50" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-cons').value=this.value;document.getElementById('th4-cons-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-cons" min="1" max="30" step="1" value="5"
+                         oninput="document.getElementById('th4-cons-val').textContent=this.value;document.getElementById('th4-cons-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">ต้องเห็น entropy นิ่ง N ครั้งติดกันก่อน lock — มากขึ้น = lock ช้าลง แต่ stable กว่า</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Entropy threshold θ</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-eth-val">0.95</span>
+                      <input type="number" id="th4-eth-n" value="0.95" min="0.01" max="1" step="0.01" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-eth').value=this.value;document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95"
+                         oninput="document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);document.getElementById('th4-eth-n').value=parseFloat(this.value).toFixed(2);debounceTuner()">
+                  <div class="param-desc">ถ้า ΔH < (1-θ)×ΔH₀ ถือว่า entropy นิ่ง — สูงขึ้น = lock ง่ายขึ้น</div>
+                </div>
+                <div class="form-group" style="margin:0">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-recalc-val">10</span>
+                      <input type="number" id="th4-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-recalc').value=this.value;document.getElementById('th4-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-recalc" min="1" max="100" step="1" value="10"
+                         oninput="document.getElementById('th4-recalc-val').textContent=this.value;document.getElementById('th4-recalc-n').value=this.value;debounceTuner()">
+                </div>
+              </div>
+            </div>
+
+            <div class="tuner-chart">
+              <div id="tuner-raw-chart" style="margin-bottom:8px;"></div>
+              <div id="tuner-chart" style="min-height:380px;"></div>
+              <div id="tuner-stats" class="stats-row"></div>
+              <div style="margin-top:14px;">
+                <div style="font-size:0.72rem;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+                  📋 Confusion Matrix (Point-Adjusted) — run ที่เลือก
+                </div>
+                <div id="tuner-cm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>

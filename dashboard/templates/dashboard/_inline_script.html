@@ -1,0 +1,76 @@
+<script>
+// ── Agg method hints ──────────────────────────────────────────────
+const AGG_HINTS = {
+  mean: 'Mean — ค่าเฉลี่ย 4 sensors, anomaly 1 ตัวถูก dilute ÷4',
+  max:  'Max — sensor ใดผิดปกติ โผล่ขึ้นทันที ไม่ถูก dilute ✓',
+  l2:   'L2 Norm — Euclidean, ขยาย outlier ด้วย squaring',
+};
+
+function onAggChange() {
+  const v = document.getElementById('agg-method').value;
+  document.getElementById('agg-hint').textContent = AGG_HINTS[v] || '';
+  RESULTS_CACHE = null; RESULTS_CACHE_KEY = null;
+  _reloadActiveTab();
+}
+
+function onLabelsChange() { _reloadActiveTab(); }
+
+function _reloadActiveTab() {
+  const active = document.querySelector('.tab-btn.active');
+  if (!active) return;
+  const name = active.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+  if (!name) return;
+  if (name === 'inspector') loadInspector();
+  if (name === 'anomaly')   loadAnomalyCharts();
+  if (name === 'tuner')     loadTuner();
+  if (name === 'trainall')  loadModelError();
+}
+
+// ── Train All: Clear Cache ─────────────────────────────────────────
+async function taClearCache() {
+  const msg = document.getElementById('ta-clear-msg');
+  if (msg) msg.textContent = 'Clearing…';
+  try {
+    const res  = await fetch('/api/train-all/clear-cache/', {method:'POST'});
+    const data = await res.json();
+    if (msg) msg.textContent = `✓ Cleared ${data.cleared} job(s)`;
+    // Reset JS state so Results tab won't show stale data
+    BATCH_JOB_ID      = null;
+    RESULTS_CACHE     = null;
+    RESULTS_CACHE_KEY = null;
+    setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
+  } catch(e) {
+    if (msg) msg.textContent = '❌ Error';
+  }
+}
+
+// ── Train All: Load device badge (called on tab mount) ─────────────
+async function taLoadDevice() {
+  const badge = document.getElementById('ta-device-badge');
+  if (!badge) return;
+  try {
+    const res  = await fetch('/api/device-info/');
+    const data = await res.json();
+    const icon = data.device === 'cuda' ? '⚡ GPU' : data.device === 'mps' ? '🍎 MPS' : '💻 CPU';
+    const clr  = data.device === 'cuda' ? '#16a34a' : data.device === 'mps' ? '#2563eb' : '#64748b';
+    badge.innerHTML = `<span style="color:${clr};font-weight:600;">${icon}</span> ${data.detail}`;
+    badge.style.borderColor = clr;
+  } catch(e) {
+    badge.textContent = '💻 CPU (default)';
+  }
+}
+
+// ── Results: Stop/Abort computation ───────────────────────────────
+async function resultsAbort() {
+  await fetch('/api/results-abort/', {method:'POST'});
+  const stopBtn    = document.getElementById('results-stop-btn');
+  const computeBtn = document.getElementById('results-compute-btn');
+  if (stopBtn)    stopBtn.style.display    = 'none';
+  if (computeBtn) computeBtn.style.display = 'inline-flex';
+  const container = document.getElementById('results-content');
+  if (container) container.innerHTML = `
+    <div style="text-align:center;padding:32px;color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:0.8rem;">
+      ⏹ Computation stopped — กด ↻ Recompute เพื่อคำนวณใหม่
+    </div>`;
+}
+</script>

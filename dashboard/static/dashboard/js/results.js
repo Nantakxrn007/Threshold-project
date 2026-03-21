@@ -26,6 +26,7 @@ async function loadResultsTable(forceRefresh = false) {
   const cacheKey = `${BATCH_JOB_ID}|${_getThHash()}`;
   if (!forceRefresh && RESULTS_CACHE && RESULTS_CACHE_KEY === cacheKey) {
     renderResultsTable(RESULTS_CACHE, container);
+    loadPrCurve();
     return;
   }
 
@@ -73,6 +74,7 @@ async function loadResultsTable(forceRefresh = false) {
     if (stopBtn)    stopBtn.style.display    = 'none';
 
     renderResultsTable(data, container);
+    loadPrCurve();
   } catch (err) {
     if (computeBtn) computeBtn.style.display = 'inline-flex';
     if (stopBtn)    stopBtn.style.display    = 'none';
@@ -402,4 +404,109 @@ function paAutoPlay() {
       document.getElementById('pa-btn-play').textContent = '▶ Auto Play';
     }
   }, 2000);
+}
+
+// ── PR Plot — reads directly from RESULTS_CACHE (same data as table) ──────────
+function loadPrCurve() {
+  const el = document.getElementById('pr-curve-chart');
+  if (!el) return;
+
+  if (!RESULTS_CACHE || !RESULTS_CACHE.has_labels || !RESULTS_CACHE.rows?.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;font-size:0.78rem;">ยังไม่มีข้อมูล — Run 🏋️ Train All Models แล้ว Recompute ก่อน</div>';
+    return;
+  }
+
+  const { rows } = RESULTS_CACHE;
+
+  // ── Visual constants ────────────────────────────────────────────
+  const MODEL_COLORS = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d'];
+  const TH_SYMBOLS   = { 'P99 Static':'circle', 'Sliding Mu+αStd':'diamond', 'Adaptive-z':'square', 'Entropy-lock':'star' };
+  const TH_SHORT     = { 'P99 Static':'P99', 'Sliding Mu+αStd':'Sliding', 'Adaptive-z':'Adaptive', 'Entropy-lock':'Entropy' };
+
+  const models = [...new Set(rows.map(r => r.model))];
+  const traces = [];
+
+  // ── F1 iso-lines ────────────────────────────────────────────────
+  for (const [f1Val, label] of [[0.2,'0.2'],[0.4,'0.4'],[0.6,'0.6'],[0.8,'0.8']]) {
+    const xs = [], ys = [];
+    for (let r = f1Val / 2 + 0.002; r <= 1.0; r += 0.008) {
+      const p = f1Val * r / (2 * r - f1Val);
+      if (p >= 0 && p <= 1.02) { xs.push(r); ys.push(Math.min(p, 1)); }
+    }
+    traces.push({ x: xs, y: ys, mode: 'lines', name: `F1=${label}`,
+      line: { color: '#cbd5e1', width: 1, dash: 'dot' },
+      showlegend: false, hoverinfo: 'skip' });
+  }
+
+  // ── Scatter points — one trace per model × threshold ────────────
+  models.forEach((model, mi) => {
+    const color   = MODEL_COLORS[mi % MODEL_COLORS.length];
+    const visible = mi < 2 ? true : 'legendonly';
+    const modelRows = rows.filter(r => r.model === model);
+
+    for (const row of modelRows) {
+      const agg = row.aggregate;
+      // Skip if no label data
+      if (agg.precision === undefined || agg.recall === undefined) continue;
+
+      const short  = TH_SHORT[row.threshold]  || row.threshold;
+      const symbol = TH_SYMBOLS[row.threshold] || 'circle';
+      const f1pct  = ((agg.f1 || 0) * 100).toFixed(1) + '%';
+      const ppct   = ((agg.precision || 0) * 100).toFixed(1) + '%';
+      const rpct   = ((agg.recall    || 0) * 100).toFixed(1) + '%';
+
+      traces.push({
+        x: [agg.recall],
+        y: [agg.precision],
+        mode: 'markers+text',
+        name: `${model} · ${short}`,
+        legendgroup: model,
+        legendgrouptitle: row.threshold === 'P99 Static' ? { text: model } : undefined,
+        showlegend: true,
+        visible,
+        marker: { size: 16, color, symbol, opacity: 0.92, line: { width: 2, color: 'white' } },
+        text: [short],
+        textposition: 'top center',
+        textfont: { size: 9, color, family: 'JetBrains Mono, monospace' },
+        hovertemplate:
+          `<b>${model}</b> · ${row.threshold}<br>` +
+          `Recall = ${rpct}<br>Precision = ${ppct}<br>F1 = ${f1pct}<extra></extra>`,
+      });
+    }
+  });
+
+  // ── F1 iso-line labels (annotations) ───────────────────────────
+  const isoAnnotations = [[0.2, 0.38],[0.4, 0.52],[0.6, 0.66],[0.8, 0.83]].map(([f1, r]) => {
+    const p = Math.min(f1 * r / (2 * r - f1), 1);
+    return { x: r, y: p, text: `F1=${f1}`, showarrow: false,
+      font: { size: 9, color: '#94a3b8' }, xanchor: 'center', yanchor: 'bottom' };
+  });
+
+  // ── Layout ──────────────────────────────────────────────────────
+  const layout = {
+    height: 460,
+    margin: { t: 44, r: 200, b: 60, l: 60 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  'transparent',
+    font: { family: 'Inter, system-ui, sans-serif', color: '#475569' },
+    xaxis: { title: 'Recall',    range: [-0.03, 1.06], gridcolor: '#e2e8f0',
+             tickformat: '.0%', zeroline: false, linecolor: '#e2e8f0', color: '#94a3b8' },
+    yaxis: { title: 'Precision', range: [-0.03, 1.06], gridcolor: '#e2e8f0',
+             tickformat: '.0%', zeroline: false, linecolor: '#e2e8f0', color: '#94a3b8' },
+    title: { text: 'PR Plot — Precision × Recall  <span style="font-size:11px;color:#94a3b8;">คลิก legend เพื่อเลือก/ซ่อนโมเดล</span>',
+             font: { size: 13, color: '#0f172a' } },
+    legend: { orientation: 'v', x: 1.01, y: 1, xanchor: 'left', yanchor: 'top',
+              bgcolor: 'rgba(255,255,255,0.95)', bordercolor: '#e2e8f0', borderwidth: 1,
+              tracegroupgap: 6, font: { size: 11 } },
+    shapes: [{ type: 'rect', x0: 0.75, y0: 0.75, x1: 1.0, y1: 1.0, layer: 'below',
+               fillcolor: 'rgba(34,197,94,0.06)', line: { color: 'rgba(34,197,94,0.25)', width: 1, dash: 'dot' } }],
+    annotations: [
+      { x: 0.875, y: 0.78, text: '✦ Best Zone', showarrow: false,
+        font: { size: 9, color: 'rgba(22,163,74,0.7)' }, xanchor: 'center' },
+      ...isoAnnotations,
+    ],
+  };
+
+  el.innerHTML = '';
+  Plotly.newPlot(el, traces, layout, { displayModeBar: false, responsive: true });
 }

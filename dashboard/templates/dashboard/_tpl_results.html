@@ -1,0 +1,78 @@
+<template id="tpl-results">
+<div class="tab-panel-tpl">
+  <div class="card" style="padding:14px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="section-title" style="margin:0;">📊 Confusion Matrix — All Models × All Thresholds</div>
+      <button class="btn btn-primary" id="results-compute-btn" style="width:auto;padding:8px 18px;"
+              onclick="loadResultsTable(true)">↻ Recompute</button>
+      <button id="results-stop-btn" style="display:none;width:auto;padding:8px 18px;border-radius:var(--radius);border:1px solid var(--red);background:#fef2f2;color:var(--red);font-size:0.83rem;font-weight:600;cursor:pointer;"
+              onclick="resultsAbort()">⏹ Stop</button>
+      <span style="font-size:0.72rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;">
+        ใช้ threshold ปัจจุบันจาก Tuner — กด Recompute หลังปรับ threshold
+      </span>
+    </div>
+  </div>
+  <div id="results-content">
+    <div style="text-align:center;padding:48px;color:var(--text-3);font-family:'JetBrains Mono',monospace;font-size:0.8rem;">
+      Run 🏋️ Train All Models first, then come back here.
+    </div>
+  </div>
+
+  <!-- ── PR Plot section ─────────────────────────────────────────── -->
+  <div class="card" style="padding:14px;margin-top:12px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">📈 PR Plot — Precision × Recall</div>
+
+      <!-- Agg method selector -->
+      <div class="form-group" style="margin:0;min-width:130px;">
+        <label class="form-label">Agg method</label>
+        <select id="pr-agg" onchange="loadPrCurve()" style="font-size:0.75rem;">
+          <option value="max">Max</option>
+          <option value="mean">Mean</option>
+          <option value="l2">L2 Norm</option>
+        </select>
+      </div>
+
+      <!-- Refresh button -->
+      <button id="pr-refresh-btn"
+              onclick="loadPrCurve()"
+              style="padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border);
+                     background:var(--bg-1);color:var(--text-2);font-size:0.78rem;
+                     font-weight:600;cursor:pointer;white-space:nowrap;">
+        ↻ Refresh
+      </button>
+
+      <!-- Legend hint -->
+      <span style="font-size:0.7rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;">
+        สี = โมเดล &nbsp;|&nbsp; สัญลักษณ์ = Threshold &nbsp;|&nbsp;
+        <b style="color:var(--text-2);">คลิก legend</b> เพื่อเลือก/ซ่อนโมเดล
+        &nbsp;|&nbsp; default แสดง 2 โมเดลแรก
+      </span>
+    </div>
+
+    <div id="pr-curve-chart" style="min-height:460px;"></div>
+
+    <!-- Threshold symbol key -->
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:0.7rem;color:var(--text-3);
+                margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+                font-family:'JetBrains Mono',monospace;">
+      <span>⬤ P99 Static</span>
+      <span>◆ Sliding Mu+αStd</span>
+      <span>■ Adaptive-z</span>
+      <span>★ Entropy-lock</span>
+      <span style="margin-left:auto;color:var(--text-3);">
+        มุมบนขวา = Precision &amp; Recall สูงพร้อมกัน = ดีที่สุด
+      </span>
+    </div>
+
+    <!-- Reading guide -->
+    <div style="font-size:0.7rem;color:var(--text-3);margin-top:6px;line-height:1.7;">
+      <b style="color:var(--text-2);">อ่านกราฟ:</b>
+      จุดอยู่มุมบนขวา = balance ดี (precision สูง &amp; recall สูง) &nbsp;|&nbsp;
+      จุดซ้ายล่าง = conservative (precision สูง recall ต่ำ) &nbsp;|&nbsp;
+      จุดขวาล่าง = sensitive (recall สูง precision ต่ำ) &nbsp;|&nbsp;
+      เส้นประ = F1 iso-line (F1 เท่ากันทุกจุดบนเส้น)
+    </div>
+  </div>
+</div>
+</template>

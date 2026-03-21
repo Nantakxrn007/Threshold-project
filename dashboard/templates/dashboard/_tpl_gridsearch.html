@@ -1,0 +1,443 @@
+<template id="tpl-gridsearch">
+<div class="tab-panel-tpl">
+
+  <!-- Model params -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:4px;">⚙ Model params</div>
+    <div class="gs-note">เลือกหลายค่าได้ — แต่ละ combination จะถูกทดสอบ กด <b>+Add</b> เพื่อเพิ่มค่าที่ต้องการ</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">Architecture</div>
+        <div class="gs-pdesc">โครงสร้าง autoencoder — LSTM/GRU เหมาะกับ time-series</div>
+        <div id="gs-arch-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+          {% for m in model_choices %}<span class="gs-chip gs-on" data-val="{{ m }}" onclick="gsTogChip(this)">{{ m }}</span>{% endfor %}
+        </div>
+      </div>
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">Hidden size</div>
+        <div class="gs-pdesc">ขนาด latent space — ใหญ่ขึ้น = จำรูปแบบได้มากขึ้น แต่ช้าและ overfit ง่ายขึ้น</div>
+        <div id="gs-hidden-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="8" onclick="gsTogChip(this)">8</span>
+          <span class="gs-chip gs-on" data-val="16" onclick="gsTogChip(this)">16</span>
+          <span class="gs-chip gs-on" data-val="32" onclick="gsTogChip(this)">32</span>
+          <span class="gs-chip" data-val="64" onclick="gsTogChip(this)">64</span>
+          <span class="gs-chip" data-val="128" onclick="gsTogChip(this)">128</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-hidden" placeholder="เพิ่มค่า" min="1" step="8">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-hidden-group','gs-add-hidden')">+ Add</button>
+        </div>
+      </div>
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">Seq len (window)</div>
+        <div class="gs-pdesc">กี่ data points ต่อ 1 sequence — ยาวขึ้น = จับ pattern ยาวขึ้น</div>
+        <div id="gs-seq-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip" data-val="30" onclick="gsTogChip(this)">30</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-seq" placeholder="เพิ่มค่า" min="1" step="5">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-seq-group','gs-add-seq')">+ Add</button>
+        </div>
+      </div>
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">Epochs</div>
+        <div class="gs-pdesc">รอบ training — มากขึ้น = fit ดีขึ้น แต่นานขึ้น</div>
+        <div id="gs-epochs-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="10" onclick="gsTogChip(this)">10</span>
+          <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
+          <span class="gs-chip gs-on" data-val="30" onclick="gsTogChip(this)">30</span>
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+          <span class="gs-chip" data-val="100" onclick="gsTogChip(this)">100</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-epochs" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-epochs-group','gs-add-epochs')">+ Add</button>
+        </div>
+      </div>
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">Learning rate</div>
+        <div class="gs-pdesc">ขนาด step ใน gradient descent — เล็กเกิน=ช้า ใหญ่เกิน=diverge</div>
+        <div id="gs-lr-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.0001" onclick="gsTogChip(this)">0.0001</span>
+          <span class="gs-chip gs-on" data-val="0.001" onclick="gsTogChip(this)">0.001</span>
+          <span class="gs-chip gs-on" data-val="0.005" onclick="gsTogChip(this)">0.005</span>
+          <span class="gs-chip" data-val="0.01" onclick="gsTogChip(this)">0.01</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-lr" placeholder="เพิ่มค่า" step="0.0001" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-lr-group','gs-add-lr')">+ Add</button>
+        </div>
+      </div>
+
+      <div class="gs-pcard">
+        <div class="gs-plabel">EWMA α</div>
+        <div class="gs-pdesc">smooth error — ต่ำ=smooth มาก สูง=ตอบสนองเร็ว</div>
+        <div id="gs-ewma-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.1" onclick="gsTogChip(this)">0.1</span>
+          <span class="gs-chip gs-on" data-val="0.2" onclick="gsTogChip(this)">0.2</span>
+          <span class="gs-chip gs-on" data-val="0.3" onclick="gsTogChip(this)">0.3</span>
+          <span class="gs-chip" data-val="0.5" onclick="gsTogChip(this)">0.5</span>
+          <span class="gs-chip" data-val="0.8" onclick="gsTogChip(this)">0.8</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-ewma" placeholder="เพิ่มค่า" step="0.05" min="0.01" max="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-ewma-group','gs-add-ewma')">+ Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared recalc -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:4px;">🔄 Update every N pts — ใช้กับทุก threshold</div>
+    <div class="gs-note">threshold ทุกแบบใช้ค่านี้ร่วมกัน — <b>น้อย</b>=smooth บ่อย แต่ช้า | <b>มาก</b>=เส้นขั้นบันได เร็วกว่า</div>
+    <div id="gs-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+      <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+      <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+      <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+      <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+      <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+    </div>
+    <div class="gs-add-row">
+      <input type="number" id="gs-add-recalc" placeholder="เพิ่มค่า" min="1" step="1">
+      <button class="gs-add-btn" onclick="gsAddChip('gs-recalc-group','gs-add-recalc')">+ Add</button>
+    </div>
+  </div>
+
+  <!-- Threshold params -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:4px;">🎛 Threshold params</div>
+    <div class="gs-note"><b>▸ Sweep</b> = ลองทุกค่าที่เลือก (เพิ่ม combinations) | <b>Fixed</b> = ค่าเดียวคงที่ทุก trial | ติ๊ก <b>include</b> เพื่อเอา threshold นั้นเข้า sweep</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+      <!-- TH1 -->
+      <div style="border:1px solid #fecaca;border-left:3px solid #ef4444;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#dc2626;font-family:'JetBrains Mono',monospace;">🔴 TH1 — Sliding Percentile</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="gs-en1" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <p class="param-desc" style="margin-bottom:8px;">Percentile ของ error ใน window ก่อนหน้า — ไม่ใช้ future data</p>
+
+        <div class="gs-plabel">▸ Sweep percentile</div>
+        <div id="gs-th1-pct-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="90" onclick="gsTogChip(this)">90</span>
+          <span class="gs-chip" data-val="95" onclick="gsTogChip(this)">95</span>
+          <span class="gs-chip gs-on" data-val="97" onclick="gsTogChip(this)">97</span>
+          <span class="gs-chip gs-on" data-val="99" onclick="gsTogChip(this)">99</span>
+          <span class="gs-chip" data-val="99.5" onclick="gsTogChip(this)">99.5</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th1pct" placeholder="เพิ่มค่า" step="0.1" min="50" max="100">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th1-pct-group','gs-add-th1pct')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th1-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+          <span class="gs-chip gs-on" data-val="100" onclick="gsTogChip(this)">100</span>
+          <span class="gs-chip" data-val="150" onclick="gsTogChip(this)">150</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:10px;">
+          <input type="number" id="gs-add-th1win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th1-win-group','gs-add-th1win')">+ Add</button>
+        </div>
+
+        <div style="border-top:1px dashed #fecaca;padding-top:8px;margin-top:2px;">
+          <div class="gs-plabel" style="color:#dc2626;">⚙ Fixed params</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:0.7rem;color:var(--text-2);">Mode</span>
+            <select id="gs-th1-mode" onchange="gsUpdateCombo()" style="font-size:0.72rem;flex:1;">
+              <option value="sliding" selected>Sliding Window</option>
+              <option value="static">Static baseline</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- TH2 -->
+      <div style="border:1px solid #bfdbfe;border-left:3px solid #3b82f6;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#1d4ed8;font-family:'JetBrains Mono',monospace;">🔵 TH2 — Sliding μ + α·σ</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="gs-en2" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <p class="param-desc" style="margin-bottom:8px;">threshold = mean + α × std ปรับตาม distribution อัตโนมัติ</p>
+
+        <div class="gs-plabel">▸ Sweep α multiplier</div>
+        <div id="gs-th2-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1.5" onclick="gsTogChip(this)">1.5</span>
+          <span class="gs-chip" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
+          <span class="gs-chip gs-on" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+          <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
+          <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th2alpha" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th2-alpha-group','gs-add-th2alpha')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th2-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="40" onclick="gsTogChip(this)">40</span>
+          <span class="gs-chip gs-on" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="120" onclick="gsTogChip(this)">120</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th2win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th2-win-group','gs-add-th2win')">+ Add</button>
+        </div>
+      </div>
+
+      <!-- TH3 -->
+      <div style="border:1px solid #bbf7d0;border-left:3px solid #10b981;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#047857;font-family:'JetBrains Mono',monospace;">🟢 TH3 — Adaptive-z</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="gs-en3" onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <p class="param-desc" style="margin-bottom:8px;">ปรับ z-score อัตโนมัติตาม anomaly density ใน window</p>
+
+        <div class="gs-plabel">▸ Sweep z_min</div>
+        <div id="gs-th3-zmin-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1.0" onclick="gsTogChip(this)">1.0</span>
+          <span class="gs-chip gs-on" data-val="1.5" onclick="gsTogChip(this)">1.5</span>
+          <span class="gs-chip gs-on" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
+          <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th3zmin" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-zmin-group','gs-add-th3zmin')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep z_max</div>
+        <div id="gs-th3-zmax-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="5.0" onclick="gsTogChip(this)">5.0</span>
+          <span class="gs-chip" data-val="7.0" onclick="gsTogChip(this)">7.0</span>
+          <span class="gs-chip gs-on" data-val="10.0" onclick="gsTogChip(this)">10.0</span>
+          <span class="gs-chip" data-val="15.0" onclick="gsTogChip(this)">15.0</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th3zmax" placeholder="เพิ่มค่า" step="0.5" min="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-zmax-group','gs-add-th3zmax')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th3-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="40" onclick="gsTogChip(this)">40</span>
+          <span class="gs-chip gs-on" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="120" onclick="gsTogChip(this)">120</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th3win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-win-group','gs-add-th3win')">+ Add</button>
+        </div>
+      </div>
+
+      <!-- TH4 -->
+      <div style="border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono',monospace;">🟣 TH4 — Entropy-lock</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="gs-en4" checked onchange="gsUpdateCombo()"> include
+          </label>
+        </div>
+        <p class="param-desc" style="margin-bottom:8px;">lock window เมื่อ entropy นิ่ง — ป้องกัน window หลวมเกิน</p>
+
+        <div class="gs-plabel">▸ Sweep α multiplier</div>
+        <div id="gs-th4-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
+          <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
+          <span class="gs-chip gs-on" data-val="3.0" onclick="gsTogChip(this)">3.0</span>
+          <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
+          <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4alpha" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-alpha-group','gs-add-th4alpha')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep max window</div>
+        <div id="gs-th4-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="100" onclick="gsTogChip(this)">100</span>
+          <span class="gs-chip gs-on" data-val="150" onclick="gsTogChip(this)">150</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-win-group','gs-add-th4win')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep consecutive violations</div>
+        <div id="gs-th4-cons-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="2" onclick="gsTogChip(this)">2</span>
+          <span class="gs-chip" data-val="3" onclick="gsTogChip(this)">3</span>
+          <span class="gs-chip gs-on" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip" data-val="8" onclick="gsTogChip(this)">8</span>
+          <span class="gs-chip" data-val="10" onclick="gsTogChip(this)">10</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4cons" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-cons-group','gs-add-th4cons')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep entropy threshold θ</div>
+        <div id="gs-th4-eth-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.80" onclick="gsTogChip(this)">0.80</span>
+          <span class="gs-chip" data-val="0.90" onclick="gsTogChip(this)">0.90</span>
+          <span class="gs-chip gs-on" data-val="0.95" onclick="gsTogChip(this)">0.95</span>
+          <span class="gs-chip" data-val="0.98" onclick="gsTogChip(this)">0.98</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th4eth" placeholder="เพิ่มค่า" step="0.01" min="0.1" max="0.99">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-eth-group','gs-add-th4eth')">+ Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Run bar -->
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;">
+    <div>
+      <div style="font-size:0.68rem;color:var(--text-3);margin-bottom:2px;">Combinations</div>
+      <div id="gs-combo-count" style="font-size:1.3rem;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;">—</div>
+    </div>
+    <div style="height:36px;width:1px;background:var(--border);"></div>
+
+    <div class="form-group" style="margin:0;min-width:170px;">
+      <label class="form-label">Search mode</label>
+      <select id="gs-search-mode" onchange="gsOnModeChange()" style="font-size:0.75rem;">
+        <option value="grid">Grid — ลองทุก combo</option>
+        <option value="random">Random — สุ่ม N combo</option>
+        <option value="optuna">Optuna Bayesian ✦</option>
+      </select>
+    </div>
+
+    <div id="gs-n-trials-wrap" style="display:none;min-width:120px;">
+      <div class="form-label">จำนวน trials</div>
+      <input id="gs-n-trials" type="number" value="30" min="5" max="500" style="font-size:0.75rem;padding:5px 8px;">
+    </div>
+
+    <div class="form-group" style="margin:0;min-width:160px;">
+      <label class="form-label">Scoring</label>
+      <select id="gs-scoring" style="font-size:0.75rem;">
+        <option value="mean_f1">Mean F1</option>
+        <option value="f1_recall">0.6×F1 + 0.4×Recall</option>
+        <option value="recall">Recall (miss-averse)</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="margin:0;min-width:110px;">
+      <label class="form-label">Error agg</label>
+      <select id="gs-agg" style="font-size:0.75rem;">
+        <option value="max" selected>Max</option>
+        <option value="mean">Mean</option>
+        <option value="l2">L2 Norm</option>
+      </select>
+    </div>
+
+    <div style="font-size:0.68rem;color:var(--text-3);background:var(--bg-2);padding:5px 10px;border-radius:5px;border:1px solid var(--border);max-width:220px;line-height:1.5;">
+      ⚠️ คะแนนคำนวณจาก<br>
+      <b style="color:var(--red);">Anomaly runs เท่านั้น</b><br>
+      Normal runs ใช้แค่ calibrate threshold
+    </div>
+
+    <div id="gs-warn" style="display:none;font-size:0.7rem;color:#dc2626;background:#fef2f2;padding:4px 10px;border-radius:5px;border:1px solid #fecaca;"></div>
+    <button id="gs-run-btn" class="btn btn-primary" style="width:auto;padding:8px 22px;margin-left:auto;" onclick="gsStart()">Run grid search</button>
+  </div>
+
+  <!-- Progress -->
+  <div id="gs-prog-panel" class="card" style="padding:14px;display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">Progress</div>
+      <div id="gs-prog-count" style="font-size:0.75rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;"></div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.73rem;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">#</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Arch</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">H</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Seq</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">LR</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Threshold</th>
+          <th style="padding:4px 7px;min-width:80px;color:var(--text-3);font-weight:400;">Progress</th>
+          <th style="padding:4px 7px;text-align:center;color:var(--text-3);font-weight:400;">F1</th>
+          <th style="padding:4px 7px;text-align:center;color:var(--text-3);font-weight:400;">Recall</th>
+          <th style="padding:4px 7px;text-align:left;color:var(--text-3);font-weight:400;">Status</th>
+        </tr></thead>
+        <tbody id="gs-prog-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="gs-results-panel" style="display:none;">
+    <div class="card" style="padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <div class="section-title" style="margin:0;">📊 Ranking — F1 Score</div>
+        <button onclick="gsCSV()" style="margin-left:auto;padding:5px 14px;border-radius:5px;border:1px solid var(--border);background:var(--bg);font-size:0.72rem;cursor:pointer;color:var(--text-2);">⬇ Save CSV</button>
+      </div>
+      <div id="gs-rank-chart"></div>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:10px;">
+      <div class="section-title" style="margin-bottom:10px;">📋 All results</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+          <thead><tr style="background:var(--bg-1);border-bottom:2px solid var(--border);">
+            <th style="padding:5px 8px;text-align:left;">#</th>
+            <th style="padding:5px 8px;text-align:left;">Arch</th>
+            <th style="padding:5px 8px;">H</th>
+            <th style="padding:5px 8px;">Seq</th>
+            <th style="padding:5px 8px;">Epochs</th>
+            <th style="padding:5px 8px;">LR</th>
+            <th style="padding:5px 8px;">EWMA</th>
+            <th style="padding:5px 8px;text-align:left;">Threshold</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">P</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">R</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">F1★</th>
+            <th style="padding:5px 8px;text-align:center;background:#eff6ff;">Acc</th>
+            <th style="padding:5px 8px;text-align:center;background:#faf5ff;">Seg</th>
+            <th style="padding:5px 8px;text-align:center;font-weight:700;">Score</th>
+          </tr></thead>
+          <tbody id="gs-result-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Best model charts -->
+    <div id="gs-best-chart-panel" class="card" style="padding:14px;display:none;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="section-title" style="margin:0;">🏆 Best model — chart preview</div>
+        <div class="form-group" style="margin:0;min-width:150px;">
+          <label class="form-label">Run</label>
+          <select id="gs-best-run" onchange="gsLoadBestCharts()">
+            {% for r in all_runs %}
+              <option value="{{ r }}"{% if forloop.first %} selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="gs-best-summary" style="margin-bottom:10px;"></div>
+      <div id="gs-best-raw" style="margin-bottom:8px;"></div>
+      <div id="gs-best-th"></div>
+    </div>
+  </div>
+
+</div>
+</template>

@@ -8,5 +8,6 @@ from .batch       import (api_train_all, api_status_all,
                            api_chart_model_umap, api_chart_model_error,
                            api_clear_batch_cache, api_device_info)
 from .results_api import api_results_table, api_results_abort
+from .pr_curve    import api_pr_curve
 from .grid_search import (api_grid_search_start, api_grid_search_status,
                            api_grid_search_best_charts)

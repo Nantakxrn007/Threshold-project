@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/charts/model-error/",           views.api_chart_model_error,   name="chart_model_error"),
     path("api/results-table/",                views.api_results_table,       name="api_results_table"),
     path("api/results-abort/",                views.api_results_abort,       name="api_results_abort"),
+    path("api/pr-curve/",                     views.api_pr_curve,            name="api_pr_curve"),
 
     # Grid Search
     path("api/grid-search/start/",                    views.api_grid_search_start,       name="api_grid_search_start"),
