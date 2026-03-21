@@ -14,12 +14,29 @@ function gsTogChip(el) {
   gsUpdateCombo();
 }
 
+function gsAddChip(groupId, inputId, step) {
+  const input = document.getElementById(inputId);
+  const raw   = input.value.trim();
+  if (!raw) return;
+  const val = step && step < 1 ? parseFloat(raw).toFixed(step === 0.01 ? 2 : 1) : raw;
+  const group = document.getElementById(groupId);
+  // If already exists, just toggle on
+  const existing = [...group.querySelectorAll('.gs-chip')].find(c => c.dataset.val === val);
+  if (existing) { existing.classList.add('gs-on'); input.value = ''; gsUpdateCombo(); return; }
+  // Create new chip
+  const chip = document.createElement('span');
+  chip.className = 'gs-chip gs-on';
+  chip.dataset.val = val;
+  chip.textContent = val;
+  chip.onclick = () => gsTogChip(chip);
+  group.appendChild(chip);
+  input.value = '';
+  gsUpdateCombo();
+}
+
 function gsChipValues(groupId) {
   const chips = document.querySelectorAll(`#${groupId} .gs-chip.gs-on`);
-  const vals  = [...chips].map(c => c.dataset.val).filter(Boolean);
-  const custom = document.querySelector(`#${groupId} .gs-custom`);
-  if (custom?.value) vals.push(custom.value);
-  return vals.length ? vals : null;
+  return [...chips].map(c => c.dataset.val).filter(Boolean);
 }
 
 function gsSliderVal(id) {
@@ -29,66 +46,114 @@ function gsSelectVal(id) {
   return document.getElementById(id)?.value || '';
 }
 
-// ── Build full cfg from current sliders ────────────────────────────
+// ── Build fixed cfg from chip groups (first selected value) ────────
+function gsFirstChipVal(groupId, fallback) {
+  const v = gsChipValues(groupId)?.[0];
+  return v !== undefined ? parseFloat(v) : fallback;
+}
+
 function gsBuildBaseCfg() {
   return {
-    th1_pct:    gsSliderVal('gs-th1-pct'),
+    th1_pct:    gsSliderVal('gs-th1-pct') || 99.0,
     th1_mode:   gsSelectVal('gs-th1-mode'),
-    th1_win:    gsSliderVal('gs-th1-win'),
-    th1_recalc: gsSliderVal('gs-th1-recalc'),
-    th2_alpha:  gsSliderVal('gs-th2-alpha'),
-    th2_win:    gsSliderVal('gs-th2-win'),
-    th2_recalc: gsSliderVal('gs-th2-recalc'),
-    th3_zmin:   gsSliderVal('gs-th3-zmin'),
-    th3_zmax:   gsSliderVal('gs-th3-zmax'),
-    th3_win:    gsSliderVal('gs-th3-win'),
-    th3_recalc: gsSliderVal('gs-th3-recalc'),
-    th4_alpha:  gsSliderVal('gs-th4-alpha'),
-    th4_win:    gsSliderVal('gs-th4-win'),
-    th4_cons:   gsSliderVal('gs-th4-cons'),
-    th4_eth:    gsSliderVal('gs-th4-eth'),
-    th4_recalc: gsSliderVal('gs-th4-recalc'),
+    th1_win:    gsFirstChipVal('gs-th1-win-group', 100),
+    th1_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th2_alpha:  3.5,
+    th2_win:    gsFirstChipVal('gs-th2-win-group', 80),
+    th2_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th3_zmin:   2.0,
+    th3_zmax:   gsFirstChipVal('gs-th3-zmax-group', 10.0),
+    th3_win:    gsFirstChipVal('gs-th3-win-group', 80),
+    th3_recalc: gsFirstChipVal('gs-recalc-group', 10),
+    th4_alpha:  3.5,
+    th4_win:    gsFirstChipVal('gs-th4-win-group', 150),
+    th4_cons:   gsFirstChipVal('gs-th4-cons-group', 5),
+    th4_eth:    gsFirstChipVal('gs-th4-eth-group', 0.95),
+    th4_recalc: gsFirstChipVal('gs-recalc-group', 10),
   };
 }
 
-// ── Build th_configs list from sweep chips ─────────────────────────
+// ── Build th_configs: sweep chips × fixed base ─────────────────────
 function gsBuildThConfigs() {
-  const base = gsBuildBaseCfg();
   const configs = [];
+  const recalcVals = gsChipValues('gs-recalc-group') || ['10'];
 
   if (document.getElementById('gs-en1')?.checked) {
-    const vals = gsChipValues('gs-th1-pct-group') || [base.th1_pct];
-    vals.forEach(v => configs.push({
-      name: `TH1 P${parseFloat(v).toFixed(1)}`,
-      th_type: 'P99 Static',
-      cfg: {...base, th1_pct: parseFloat(v)},
-    }));
+    const pcts = gsChipValues('gs-th1-pct-group') || ['99'];
+    const wins = gsChipValues('gs-th1-win-group') || ['100'];
+    const mode = gsSelectVal('gs-th1-mode');
+    for (const pct of pcts) {
+      for (const win of wins) {
+        for (const rec of recalcVals) {
+          configs.push({
+            name: `TH1 P${parseFloat(pct)} w${win}`,
+            th_type: 'P99 Static',
+            cfg: {...gsBuildBaseCfg(), th1_pct: parseFloat(pct), th1_mode: mode,
+                  th1_win: parseFloat(win), th1_recalc: parseFloat(rec)},
+          });
+        }
+      }
+    }
   }
   if (document.getElementById('gs-en2')?.checked) {
-    const vals = gsChipValues('gs-th2-alpha-group') || [base.th2_alpha];
-    vals.forEach(v => configs.push({
-      name: `TH2 α=${parseFloat(v).toFixed(1)}`,
-      th_type: 'Sliding Mu+αStd',
-      cfg: {...base, th2_alpha: parseFloat(v)},
-    }));
+    const alphas = gsChipValues('gs-th2-alpha-group') || ['3.5'];
+    const wins   = gsChipValues('gs-th2-win-group')   || ['80'];
+    for (const a of alphas) {
+      for (const win of wins) {
+        for (const rec of recalcVals) {
+          configs.push({
+            name: `TH2 α${parseFloat(a)} w${win}`,
+            th_type: 'Sliding Mu+αStd',
+            cfg: {...gsBuildBaseCfg(), th2_alpha: parseFloat(a),
+                  th2_win: parseFloat(win), th2_recalc: parseFloat(rec)},
+          });
+        }
+      }
+    }
   }
   if (document.getElementById('gs-en3')?.checked) {
-    const vals = gsChipValues('gs-th3-zmin-group') || [base.th3_zmin];
-    vals.forEach(v => configs.push({
-      name: `TH3 z=${parseFloat(v).toFixed(1)}`,
-      th_type: 'Adaptive-z',
-      cfg: {...base, th3_zmin: parseFloat(v)},
-    }));
+    const zmins = gsChipValues('gs-th3-zmin-group') || ['2.0'];
+    const zmaxs = gsChipValues('gs-th3-zmax-group') || ['10.0'];
+    const wins  = gsChipValues('gs-th3-win-group')  || ['80'];
+    for (const zmin of zmins) {
+      for (const zmax of zmaxs) {
+        for (const win of wins) {
+          for (const rec of recalcVals) {
+            configs.push({
+              name: `TH3 z${parseFloat(zmin)}-${parseFloat(zmax)} w${win}`,
+              th_type: 'Adaptive-z',
+              cfg: {...gsBuildBaseCfg(), th3_zmin: parseFloat(zmin),
+                    th3_zmax: parseFloat(zmax), th3_win: parseFloat(win), th3_recalc: parseFloat(rec)},
+            });
+          }
+        }
+      }
+    }
   }
   if (document.getElementById('gs-en4')?.checked) {
-    const vals = gsChipValues('gs-th4-alpha-group') || [base.th4_alpha];
-    vals.forEach(v => configs.push({
-      name: `TH4 α=${parseFloat(v).toFixed(1)}`,
-      th_type: 'Entropy-lock',
-      cfg: {...base, th4_alpha: parseFloat(v)},
-    }));
+    const alphas = gsChipValues('gs-th4-alpha-group') || ['3.5'];
+    const wins   = gsChipValues('gs-th4-win-group')   || ['150'];
+    const conss  = gsChipValues('gs-th4-cons-group')  || ['5'];
+    const eths   = gsChipValues('gs-th4-eth-group')   || ['0.95'];
+    for (const a of alphas) {
+      for (const win of wins) {
+        for (const cons of conss) {
+          for (const eth of eths) {
+            for (const rec of recalcVals) {
+              configs.push({
+                name: `TH4 α${parseFloat(a)} w${win}`,
+                th_type: 'Entropy-lock',
+                cfg: {...gsBuildBaseCfg(), th4_alpha: parseFloat(a),
+                      th4_win: parseFloat(win), th4_cons: parseFloat(cons),
+                      th4_eth: parseFloat(eth), th4_recalc: parseFloat(rec)},
+              });
+            }
+          }
+        }
+      }
+    }
   }
-  return configs.length ? configs : [{name:'P99 Static',th_type:'P99 Static',cfg:base}];
+  return configs.length ? configs : [{name:'P99 Static',th_type:'P99 Static',cfg:gsBuildBaseCfg()}];
 }
 
 // ── Mode change: show/hide n_trials ───────────────────────────────
@@ -101,7 +166,7 @@ function gsOnModeChange() {
 
 // ── Combination counter ────────────────────────────────────────────
 function gsUpdateCombo() {
-  const get = id => Math.max((gsChipValues(id) || [0]).length, 1);
+  const get = id => Math.max((gsChipValues(id) || []).length, 1);
   const model = get('gs-arch-group') * get('gs-hidden-group') * get('gs-seq-group') *
                 get('gs-epochs-group') * get('gs-lr-group') * get('gs-ewma-group');
   const thConfigs = gsBuildThConfigs();
@@ -113,7 +178,7 @@ function gsUpdateCombo() {
   if (warn) {
     warn.style.display = total > 200 ? 'block' : 'none';
     if (warn.style.display === 'block')
-      warn.textContent = `${total.toLocaleString()} combos — อาจใช้เวลานาน`;
+      warn.textContent = `${total.toLocaleString()} combos — เปลี่ยน mode เป็น Random/Optuna`;
   }
 }
 

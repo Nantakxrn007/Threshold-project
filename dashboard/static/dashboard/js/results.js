@@ -34,6 +34,12 @@ async function loadResultsTable(forceRefresh = false) {
       ⏳ Computing metrics…
     </div>`;
 
+  // Show Stop button while computing
+  const computeBtn = document.getElementById('results-compute-btn');
+  const stopBtn    = document.getElementById('results-stop-btn');
+  if (computeBtn) computeBtn.style.display = 'none';
+  if (stopBtn)    stopBtn.style.display    = 'inline-flex';
+
   const g = id => document.getElementById(id)?.value ?? '';
   const params = new URLSearchParams({
     job_id:     BATCH_JOB_ID,
@@ -61,8 +67,15 @@ async function loadResultsTable(forceRefresh = false) {
     const data = await res.json();
     RESULTS_CACHE     = data;
     RESULTS_CACHE_KEY = cacheKey;
+
+    // Hide stop, show compute
+    if (computeBtn) computeBtn.style.display = 'inline-flex';
+    if (stopBtn)    stopBtn.style.display    = 'none';
+
     renderResultsTable(data, container);
   } catch (err) {
+    if (computeBtn) computeBtn.style.display = 'inline-flex';
+    if (stopBtn)    stopBtn.style.display    = 'none';
     container.innerHTML = `
       <div style="color:var(--red);padding:32px;text-align:center;font-family:'JetBrains Mono',monospace;">
         ❌ ${err.message}

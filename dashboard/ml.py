@@ -76,7 +76,7 @@ def get_training_data() -> pd.DataFrame:
     """
     # โหลดและคลีน Label ทั้งหมด
     df = load_and_clean_data('data_cleaned7.csv', max_gap=30)
-    
+    df = df[df['run_id'].isin(ALL_RUNS)]
     # กรองเอาเฉพาะ run_id ที่เรากำหนดไว้ใน Constants (ถ้าต้องการ)
     # df = df[df['run_id'].isin(ALL_RUNS)]
     
@@ -222,7 +222,13 @@ class Pipeline:
         self.epochs     = epochs
         self.batch_size = batch_size
         self.scaler     = StandardScaler()
-        self.device     = torch.device("cpu")
+        # Auto-detect: CUDA → MPS (Apple) → CPU
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         self.loss_history: list[float] = []
 
         cls         = MODEL_MAP[model_type]
@@ -252,7 +258,7 @@ class Pipeline:
             if len(seqs):
                 all_seqs.append(seqs)
 
-        X  = torch.FloatTensor(np.vstack(all_seqs))
+        X  = torch.FloatTensor(np.vstack(all_seqs)).to(self.device)
         dl = DataLoader(
             TensorDataset(X, X),
             batch_size=self.batch_size,
@@ -293,12 +299,12 @@ class Pipeline:
                 continue
 
             with torch.no_grad():
-                recon, z = self.model(torch.FloatTensor(seqs))
+                recon, z = self.model(torch.FloatTensor(seqs).to(self.device))
 
-            z_vecs.append(z.numpy())
+            z_vecs.append(z.cpu().numpy())
             z_labels.extend([rid] * len(z))
 
-            mae = np.abs(seqs[:, -1, :] - recon.numpy()[:, -1, :])
+            mae = np.abs(seqs[:, -1, :] - recon.cpu().numpy()[:, -1, :])
             df_mae = (
                 pd.DataFrame(mae, columns=FEATS)
                 .ewm(alpha=self.ewma, adjust=False)
@@ -530,10 +536,12 @@ def compute_metrics_from_error(df_err: pd.DataFrame, df_original: pd.DataFrame, 
                 f1   = 2 * prec * rec / max(prec + rec, 1e-9)
                 acc  = (tp + tn) / max(tp + fp + tn + fn, 1)
 
-                # segment-level stats
-                segments     = _get_anomaly_segments(y_true)
-                n_segs       = len(segments)
-                detected     = sum(1 for s, e in segments if y_pred[s:e+1].any())
+                # ── segment-level stats ───────────────────────────────
+                # นับ segments จาก y_true (overall = max ของทุก sensor หลัง gap fill)
+                # ใช้ y_true ตรงๆ ไม่ต้อง union per-sensor เพราะ y_true ทำไปแล้ว
+                segments = _get_anomaly_segments(y_true)
+                n_segs   = len(segments)
+                detected = sum(1 for s, e in segments if y_pred[s:e+1].any())
 
                 m.update(dict(
                     tp=tp, fp=fp, tn=tn, fn=fn,

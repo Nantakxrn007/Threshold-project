@@ -19,9 +19,12 @@ urlpatterns = [
     # Train-All
     path("api/train-all/",                    views.api_train_all,           name="api_train_all"),
     path("api/status-all/<str:job_id>/",      views.api_status_all,          name="api_status_all"),
+    path("api/train-all/clear-cache/",        views.api_clear_batch_cache,   name="api_clear_batch_cache"),
+    path("api/device-info/",                  views.api_device_info,         name="api_device_info"),
     path("api/charts/model-umap/",            views.api_chart_model_umap,    name="chart_model_umap"),
     path("api/charts/model-error/",           views.api_chart_model_error,   name="chart_model_error"),
     path("api/results-table/",                views.api_results_table,       name="api_results_table"),
+    path("api/results-abort/",                views.api_results_abort,       name="api_results_abort"),
 
     # Grid Search
     path("api/grid-search/start/",                    views.api_grid_search_start,       name="api_grid_search_start"),

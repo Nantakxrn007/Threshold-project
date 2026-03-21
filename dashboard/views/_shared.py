@@ -16,7 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from ..ml import (
     ALL_RUNS, ANOMALY_RUNS, FEATS, NORMAL_RUNS, MODEL_MAP, LABEL_COLS,
-    Pipeline, ThresholdEvaluator, get_training_data, compute_metrics_from_error,
+    Pipeline, ThresholdEvaluator, get_training_data, compute_metrics_from_error
 )
 
 # ── Globals ───────────────────────────────────────────────────────────────────

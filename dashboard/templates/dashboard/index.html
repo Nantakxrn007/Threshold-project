@@ -219,10 +219,11 @@
       <div id="tab-tuner" class="tab-panel">
         <div class="card">
           <div class="section-title">🎛 Threshold Parameter Tuner</div>
-          <p class="hint">ปรับ slider → กราฟ update ทันที — ไม่ต้อง retrain<br>
-          หลังปรับ threshold แล้ว ไปหน้า 📊 Results กด ↻ Recompute เพื่อดูผลใหม่</p>
+          <p class="hint">ปรับ slider หรือพิมพ์ตัวเลขโดยตรง → กราฟ update ทันที ไม่ต้อง retrain<br>
+          หลังปรับแล้ว ไปหน้า 📊 Results กด ↻ Recompute เพื่อดูผลใหม่</p>
           <div class="tuner-wrap">
             <div class="tuner-controls">
+
               <div class="form-group">
                 <label class="form-label">Run to tune on</label>
                 <select id="tuner-run" onchange="loadTuner()">
@@ -230,11 +231,13 @@
                 </select>
               </div>
 
+              <!-- TH1 -->
               <div class="card th-section" style="border-left:3px solid #ef4444;padding:12px;">
                 <div class="th-title" style="color:#ef4444;display:flex;justify-content:space-between;align-items:center;">
                   🔴 TH1 — Sliding Percentile
                   <button onclick="resetTh(1)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;cursor:pointer;">↺ Reset</button>
                 </div>
+                <p class="param-desc" style="margin-bottom:8px;">ใช้ percentile ของ error ใน window ก่อนหน้าเป็น threshold — สูง = conservative (จับน้อย), ต่ำ = sensitive (จับมาก)</p>
 
                 <div class="form-group" style="margin-bottom:8px;">
                   <label class="form-label">Mode</label>
@@ -242,106 +245,218 @@
                     <option value="sliding" selected>Sliding Window (Realistic)</option>
                     <option value="static">Static (Normal baseline)</option>
                   </select>
+                  <div class="param-desc">Sliding = คำนวณจากข้อมูลก่อนหน้า N จุด ไม่ใช้ future data</div>
                 </div>
 
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">Percentile</label><span class="range-val" id="th1-pct-val">99.0</span></div>
+                  <div class="range-row"><label class="form-label" style="margin:0">Percentile</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th1-pct-val">99.0</span>
+                      <input type="number" id="th1-pct-n" value="99.0" min="50" max="99.9" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th1-pct').value=this.value;document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
                   <input type="range" id="th1-pct" min="90" max="99.9" step="0.1" value="99.0"
-                         oninput="document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                         oninput="document.getElementById('th1-pct-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th1-pct-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">P99 = threshold ที่ 99% ของ normal error อยู่ต่ำกว่า</div>
                 </div>
 
                 <div id="th1-sliding-params">
                   <div class="form-group">
-                    <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th1-win-val">100</span></div>
-                    <input type="range" id="th1-win" min="20" max="300" step="10" value="100"
-                           oninput="document.getElementById('th1-win-val').textContent=this.value;debounceTuner()">
+                    <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                      <div style="display:flex;gap:4px;align-items:center;">
+                        <span class="range-val" id="th1-win-val">100</span>
+                        <input type="number" id="th1-win-n" value="100" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                               oninput="document.getElementById('th1-win').value=this.value;document.getElementById('th1-win-val').textContent=this.value;debounceTuner()">
+                      </div>
+                    </div>
+                    <input type="range" id="th1-win" min="20" max="500" step="10" value="100"
+                           oninput="document.getElementById('th1-win-val').textContent=this.value;document.getElementById('th1-win-n').value=this.value;debounceTuner()">
+                    <div class="param-desc">จำนวน data points ที่มองย้อนหลัง — ใหญ่ = stable แต่ตอบสนองช้า</div>
                   </div>
                   <div class="form-group" style="margin:0">
-                    <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th1-recalc-val">10</span></div>
-                    <input type="range" id="th1-recalc" min="1" max="50" step="1" value="10"
-                           oninput="document.getElementById('th1-recalc-val').textContent=this.value;debounceTuner()">
+                    <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                      <div style="display:flex;gap:4px;align-items:center;">
+                        <span class="range-val" id="th1-recalc-val">10</span>
+                        <input type="number" id="th1-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                               oninput="document.getElementById('th1-recalc').value=this.value;document.getElementById('th1-recalc-val').textContent=this.value;debounceTuner()">
+                      </div>
+                    </div>
+                    <input type="range" id="th1-recalc" min="1" max="100" step="1" value="10"
+                           oninput="document.getElementById('th1-recalc-val').textContent=this.value;document.getElementById('th1-recalc-n').value=this.value;debounceTuner()">
+                    <div class="param-desc">คำนวณ threshold ใหม่ทุก N จุด — 1 = smooth สุด แต่ช้ากว่า</div>
                   </div>
                 </div>
               </div>
 
+              <!-- TH2 -->
               <div class="card th-section" style="border-left:3px solid #3b82f6;padding:12px;">
                 <div class="th-title" style="color:#3b82f6;display:flex;justify-content:space-between;align-items:center;">
-                  🔵 TH2 — Sliding Mu + α·Std
+                  🔵 TH2 — Sliding μ + α·σ
                   <button onclick="resetTh(2)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;">↺ Reset</button>
                 </div>
+                <p class="param-desc" style="margin-bottom:8px;">threshold = mean + α × std ของ error ใน window ก่อนหน้า — ปรับตามความผันผวนของสัญญาณอัตโนมัติ</p>
+
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label><span class="range-val" id="th2-alpha-val">3.5</span></div>
-                  <input type="range" id="th2-alpha" min="1" max="7" step="0.1" value="3.5"
-                         oninput="document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-alpha-val">3.5</span>
+                      <input type="number" id="th2-alpha-n" value="3.5" min="0.5" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-alpha').value=this.value;document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-alpha" min="0.5" max="10" step="0.1" value="3.5"
+                         oninput="document.getElementById('th2-alpha-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th2-alpha-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">สูง = conservative (ต้องเกินค่าเฉลี่ยไปมากๆ ถึงจะ flag)</div>
                 </div>
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th2-win-val">80</span></div>
-                  <input type="range" id="th2-win" min="10" max="200" step="5" value="80"
-                         oninput="document.getElementById('th2-win-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-win-val">80</span>
+                      <input type="number" id="th2-win-n" value="80" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-win').value=this.value;document.getElementById('th2-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-win" min="10" max="500" step="5" value="80"
+                         oninput="document.getElementById('th2-win-val').textContent=this.value;document.getElementById('th2-win-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">ขนาด sliding window สำหรับคำนวณ μ และ σ</div>
                 </div>
                 <div class="form-group" style="margin:0">
-                  <div class="range-row"><label class="form-label" style="margin:0">Recalc every N</label><span class="range-val" id="th2-recalc-val">50</span></div>
-                  <input type="range" id="th2-recalc" min="5" max="100" step="5" value="50"
-                         oninput="document.getElementById('th2-recalc-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th2-recalc-val">50</span>
+                      <input type="number" id="th2-recalc-n" value="50" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th2-recalc').value=this.value;document.getElementById('th2-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th2-recalc" min="1" max="200" step="5" value="50"
+                         oninput="document.getElementById('th2-recalc-val').textContent=this.value;document.getElementById('th2-recalc-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">คำนวณ μ/σ ใหม่ทุก N จุด — น้อย = ตามทัน แต่ช้ากว่า</div>
                 </div>
               </div>
 
+              <!-- TH3 -->
               <div class="card th-section" style="border-left:3px solid #10b981;padding:12px;">
                 <div class="th-title" style="color:#10b981;display:flex;justify-content:space-between;align-items:center;">
                   🟢 TH3 — Adaptive-z
                   <button onclick="resetTh(3)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #10b981;background:transparent;color:#10b981;cursor:pointer;">↺ Reset</button>
                 </div>
+                <p class="param-desc" style="margin-bottom:8px;">ปรับ z-score multiplier อัตโนมัติตาม anomaly density ที่ตรวจเจอใน window — ไม่ต้องตั้ง α เอง</p>
+
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">z_min</label><span class="range-val" id="th3-zmin-val">2.0</span></div>
-                  <input type="range" id="th3-zmin" min="0.5" max="5" step="0.1" value="2.0"
-                         oninput="document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_min (ต่ำสุด)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-zmin-val">2.0</span>
+                      <input type="number" id="th3-zmin-n" value="2.0" min="0.1" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-zmin').value=this.value;document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-zmin" min="0.5" max="10" step="0.1" value="2.0"
+                         oninput="document.getElementById('th3-zmin-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th3-zmin-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">z ต่ำสุดที่ยอมให้ — ป้องกันไม่ให้ threshold ต่ำเกินไป</div>
                 </div>
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">z_max</label><span class="range-val" id="th3-zmax-val">10.0</span></div>
-                  <input type="range" id="th3-zmax" min="5" max="20" step="0.5" value="10.0"
-                         oninput="document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">z_max (สูงสุด)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-zmax-val">10.0</span>
+                      <input type="number" id="th3-zmax-n" value="10.0" min="1" max="50" step="0.5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-zmax').value=this.value;document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-zmax" min="2" max="30" step="0.5" value="10.0"
+                         oninput="document.getElementById('th3-zmax-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th3-zmax-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">z สูงสุดที่ยอมให้ — ป้องกันไม่ให้ threshold สูงเกินจนจับไม่ได้</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-win-val">80</span>
+                      <input type="number" id="th3-win-n" value="80" min="1" step="5" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-win').value=this.value;document.getElementById('th3-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-win" min="10" max="500" step="5" value="80"
+                         oninput="document.getElementById('th3-win-val').textContent=this.value;document.getElementById('th3-win-n').value=this.value;debounceTuner()">
                 </div>
                 <div class="form-group" style="margin:0">
-                  <div class="range-row"><label class="form-label" style="margin:0">Window</label><span class="range-val" id="th3-win-val">80</span></div>
-                  <input type="range" id="th3-win" min="10" max="200" step="5" value="80"
-                         oninput="document.getElementById('th3-win-val').textContent=this.value;debounceTuner()">
-                </div>
-                <div class="form-group" style="margin:0;margin-top:8px;">
-                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th3-recalc-val">1</span></div>
-                  <input type="range" id="th3-recalc" min="1" max="50" step="1" value="1"
-                         oninput="document.getElementById('th3-recalc-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th3-recalc-val">10</span>
+                      <input type="number" id="th3-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th3-recalc').value=this.value;document.getElementById('th3-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th3-recalc" min="1" max="100" step="1" value="10"
+                         oninput="document.getElementById('th3-recalc-val').textContent=this.value;document.getElementById('th3-recalc-n').value=this.value;debounceTuner()">
                 </div>
               </div>
 
+              <!-- TH4 -->
               <div class="card th-section" style="border-left:3px solid #7c3aed;padding:12px;">
                 <div class="th-title" style="color:#7c3aed;display:flex;justify-content:space-between;align-items:center;">
                   🟣 TH4 — Entropy-lock
                   <button onclick="resetTh(4)" style="font-size:0.65rem;padding:2px 7px;border-radius:4px;border:1px solid #7c3aed;background:transparent;color:#7c3aed;cursor:pointer;">↺ Reset</button>
                 </div>
+                <p class="param-desc" style="margin-bottom:8px;">lock window size เมื่อ entropy ของ error distribution นิ่งพอ — ไม่ให้ window ขยายออกไปเรื่อยๆ จน threshold หลวม</p>
+
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label><span class="range-val" id="th4-alpha-val">3.5</span></div>
-                  <input type="range" id="th4-alpha" min="1" max="7" step="0.1" value="3.5"
-                         oninput="document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">α multiplier</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-alpha-val">3.5</span>
+                      <input type="number" id="th4-alpha-n" value="3.5" min="0.5" max="20" step="0.1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-alpha').value=this.value;document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-alpha" min="0.5" max="10" step="0.1" value="3.5"
+                         oninput="document.getElementById('th4-alpha-val').textContent=parseFloat(this.value).toFixed(1);document.getElementById('th4-alpha-n').value=parseFloat(this.value).toFixed(1);debounceTuner()">
+                  <div class="param-desc">เหมือน TH2 — μ + α·σ ของ window ที่ lock</div>
                 </div>
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">Max window</label><span class="range-val" id="th4-win-val">150</span></div>
-                  <input type="range" id="th4-win" min="50" max="300" step="10" value="150"
-                         oninput="document.getElementById('th4-win-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Max window (pts)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-win-val">150</span>
+                      <input type="number" id="th4-win-n" value="150" min="1" step="10" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-win').value=this.value;document.getElementById('th4-win-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-win" min="20" max="500" step="10" value="150"
+                         oninput="document.getElementById('th4-win-val').textContent=this.value;document.getElementById('th4-win-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">window ขยายได้สูงสุด N จุด ก่อน entropy lock ทำงาน</div>
                 </div>
                 <div class="form-group">
-                  <div class="range-row"><label class="form-label" style="margin:0">Consecutive violations</label><span class="range-val" id="th4-cons-val">5</span></div>
-                  <input type="range" id="th4-cons" min="2" max="20" step="1" value="5"
-                         oninput="document.getElementById('th4-cons-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Consecutive violations</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-cons-val">5</span>
+                      <input type="number" id="th4-cons-n" value="5" min="1" max="50" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-cons').value=this.value;document.getElementById('th4-cons-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-cons" min="1" max="30" step="1" value="5"
+                         oninput="document.getElementById('th4-cons-val').textContent=this.value;document.getElementById('th4-cons-n').value=this.value;debounceTuner()">
+                  <div class="param-desc">ต้องเห็น entropy นิ่ง N ครั้งติดกันก่อน lock — มากขึ้น = lock ช้าลง แต่ stable กว่า</div>
+                </div>
+                <div class="form-group">
+                  <div class="range-row"><label class="form-label" style="margin:0">Entropy threshold θ</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-eth-val">0.95</span>
+                      <input type="number" id="th4-eth-n" value="0.95" min="0.01" max="1" step="0.01" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-eth').value=this.value;document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95"
+                         oninput="document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);document.getElementById('th4-eth-n').value=parseFloat(this.value).toFixed(2);debounceTuner()">
+                  <div class="param-desc">ถ้า ΔH < (1-θ)×ΔH₀ ถือว่า entropy นิ่ง — สูงขึ้น = lock ง่ายขึ้น</div>
                 </div>
                 <div class="form-group" style="margin:0">
-                  <div class="range-row"><label class="form-label" style="margin:0">Entropy threshold θ</label><span class="range-val" id="th4-eth-val">0.95</span></div>
-                  <input type="range" id="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95"
-                         oninput="document.getElementById('th4-eth-val').textContent=parseFloat(this.value).toFixed(2);debounceTuner()">
-                </div>
-                <div class="form-group" style="margin:0;margin-top:8px;">
-                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label><span class="range-val" id="th4-recalc-val">1</span></div>
-                  <input type="range" id="th4-recalc" min="1" max="50" step="1" value="1"
-                         oninput="document.getElementById('th4-recalc-val').textContent=this.value;debounceTuner()">
+                  <div class="range-row"><label class="form-label" style="margin:0">Update every N pts</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                      <span class="range-val" id="th4-recalc-val">10</span>
+                      <input type="number" id="th4-recalc-n" value="10" min="1" step="1" style="width:54px;font-size:0.7rem;padding:1px 4px;border:1px solid var(--border);border-radius:4px;"
+                             oninput="document.getElementById('th4-recalc').value=this.value;document.getElementById('th4-recalc-val').textContent=this.value;debounceTuner()">
+                    </div>
+                  </div>
+                  <input type="range" id="th4-recalc" min="1" max="100" step="1" value="10"
+                         oninput="document.getElementById('th4-recalc-val').textContent=this.value;document.getElementById('th4-recalc-n').value=this.value;debounceTuner()">
                 </div>
               </div>
             </div>
@@ -350,7 +465,6 @@
               <div id="tuner-raw-chart" style="margin-bottom:8px;"></div>
               <div id="tuner-chart" style="min-height:380px;"></div>
               <div id="tuner-stats" class="stats-row"></div>
-              <!-- Confusion matrix per threshold — updates on every tune -->
               <div style="margin-top:14px;">
                 <div style="font-size:0.72rem;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
                   📋 Confusion Matrix (Point-Adjusted) — run ที่เลือก
@@ -395,6 +509,25 @@
         <input type="number" id="ta-ewma" value="0.3" step="0.05" min="0.01" max="1" style="width:100%"></div>
       <button class="btn btn-primary" id="ta-btn-train" onclick="startTrainAll()">🏋️ Train All Models</button>
       <div id="ta-msg" style="font-size:0.73rem;color:var(--text-2);font-family:'JetBrains Mono',monospace;margin-top:6px;min-height:18px;"></div>
+
+      <div class="divider" style="margin:10px 0;"></div>
+
+      <!-- Device info + Clear cache -->
+      <div style="font-size:0.68rem;color:var(--text-3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">System</div>
+      <div id="ta-device-badge" style="font-size:0.7rem;font-family:'JetBrains Mono',monospace;padding:4px 8px;border-radius:4px;background:var(--bg-2);border:1px solid var(--border);color:var(--text-2);margin-bottom:8px;">
+        ⏳ detecting…
+      </div>
+      <button onclick="taClearCache()" style="width:100%;padding:7px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--text-2);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;" title="ล้าง job results เก่าออกจาก memory">
+        🗑 Clear Cache
+      </button>
+      <div id="ta-clear-msg" style="font-size:0.68rem;color:var(--green);font-family:'JetBrains Mono',monospace;margin-top:4px;min-height:14px;"></div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+        <button onclick="taClearCache()"
+                style="width:100%;padding:6px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);font-size:0.72rem;cursor:pointer;color:var(--text-3);">
+          🗑 Clear cache (คืน RAM)
+        </button>
+        <div id="ta-clear-msg" style="font-size:0.68rem;color:var(--text-3);margin-top:4px;font-family:'JetBrains Mono',monospace;min-height:14px;"></div>
+      </div>
     </div>
 
     <div class="card" style="flex:1;min-width:0;padding:14px;">
@@ -455,8 +588,10 @@
   <div class="card" style="padding:14px;margin-bottom:12px;">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div class="section-title" style="margin:0;">📊 Confusion Matrix — All Models × All Thresholds</div>
-      <button class="btn btn-primary" style="width:auto;padding:8px 18px;"
+      <button class="btn btn-primary" id="results-compute-btn" style="width:auto;padding:8px 18px;"
               onclick="loadResultsTable(true)">↻ Recompute</button>
+      <button id="results-stop-btn" style="display:none;width:auto;padding:8px 18px;border-radius:var(--radius);border:1px solid var(--red);background:#fef2f2;color:var(--red);font-size:0.83rem;font-weight:600;cursor:pointer;"
+              onclick="resultsAbort()">⏹ Stop</button>
       <span style="font-size:0.72rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;">
         ใช้ threshold ปัจจุบันจาก Tuner — กด Recompute หลังปรับ threshold
       </span>
@@ -476,201 +611,314 @@
 
   <!-- Model params -->
   <div class="card" style="padding:14px;margin-bottom:10px;">
-    <div class="section-title" style="margin-bottom:10px;">⚙ Model params — เลือกค่าที่ต้องการ sweep</div>
+    <div class="section-title" style="margin-bottom:4px;">⚙ Model params</div>
+    <div class="gs-note">เลือกหลายค่าได้ — แต่ละ combination จะถูกทดสอบ กด <b>+Add</b> เพื่อเพิ่มค่าที่ต้องการ</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">Architecture</div>
+      <div class="gs-pcard">
+        <div class="gs-plabel">Architecture</div>
+        <div class="gs-pdesc">โครงสร้าง autoencoder — LSTM/GRU เหมาะกับ time-series</div>
         <div id="gs-arch-group" style="display:flex;gap:4px;flex-wrap:wrap;">
-          {% for m in model_choices %}
-          <span class="gs-chip gs-on" data-val="{{ m }}" onclick="gsTogChip(this)">{{ m }}</span>
-          {% endfor %}
+          {% for m in model_choices %}<span class="gs-chip gs-on" data-val="{{ m }}" onclick="gsTogChip(this)">{{ m }}</span>{% endfor %}
         </div>
       </div>
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">Hidden size</div>
-        <div id="gs-hidden-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+      <div class="gs-pcard">
+        <div class="gs-plabel">Hidden size</div>
+        <div class="gs-pdesc">ขนาด latent space — ใหญ่ขึ้น = จำรูปแบบได้มากขึ้น แต่ช้าและ overfit ง่ายขึ้น</div>
+        <div id="gs-hidden-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
           <span class="gs-chip" data-val="8" onclick="gsTogChip(this)">8</span>
           <span class="gs-chip gs-on" data-val="16" onclick="gsTogChip(this)">16</span>
           <span class="gs-chip gs-on" data-val="32" onclick="gsTogChip(this)">32</span>
           <span class="gs-chip" data-val="64" onclick="gsTogChip(this)">64</span>
-          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+          <span class="gs-chip" data-val="128" onclick="gsTogChip(this)">128</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-hidden" placeholder="เพิ่มค่า" min="1" step="8">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-hidden-group','gs-add-hidden')">+ Add</button>
         </div>
       </div>
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">Seq len</div>
-        <div id="gs-seq-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+      <div class="gs-pcard">
+        <div class="gs-plabel">Seq len (window)</div>
+        <div class="gs-pdesc">กี่ data points ต่อ 1 sequence — ยาวขึ้น = จับ pattern ยาวขึ้น</div>
+        <div id="gs-seq-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
           <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
           <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
           <span class="gs-chip" data-val="30" onclick="gsTogChip(this)">30</span>
           <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
-          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-seq" placeholder="เพิ่มค่า" min="1" step="5">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-seq-group','gs-add-seq')">+ Add</button>
         </div>
       </div>
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">Epochs</div>
-        <div id="gs-epochs-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+      <div class="gs-pcard">
+        <div class="gs-plabel">Epochs</div>
+        <div class="gs-pdesc">รอบ training — มากขึ้น = fit ดีขึ้น แต่นานขึ้น</div>
+        <div id="gs-epochs-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="10" onclick="gsTogChip(this)">10</span>
           <span class="gs-chip gs-on" data-val="20" onclick="gsTogChip(this)">20</span>
           <span class="gs-chip gs-on" data-val="30" onclick="gsTogChip(this)">30</span>
           <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
-          <input class="gs-custom" type="number" placeholder="custom" min="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+          <span class="gs-chip" data-val="100" onclick="gsTogChip(this)">100</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-epochs" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-epochs-group','gs-add-epochs')">+ Add</button>
         </div>
       </div>
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">Learning rate</div>
-        <div id="gs-lr-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+      <div class="gs-pcard">
+        <div class="gs-plabel">Learning rate</div>
+        <div class="gs-pdesc">ขนาด step ใน gradient descent — เล็กเกิน=ช้า ใหญ่เกิน=diverge</div>
+        <div id="gs-lr-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.0001" onclick="gsTogChip(this)">0.0001</span>
           <span class="gs-chip gs-on" data-val="0.001" onclick="gsTogChip(this)">0.001</span>
           <span class="gs-chip gs-on" data-val="0.005" onclick="gsTogChip(this)">0.005</span>
           <span class="gs-chip" data-val="0.01" onclick="gsTogChip(this)">0.01</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.0001" min="0" style="width:68px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-lr" placeholder="เพิ่มค่า" step="0.0001" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-lr-group','gs-add-lr')">+ Add</button>
         </div>
       </div>
 
-      <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">
-        <div class="form-label">EWMA α</div>
-        <div id="gs-ewma-group" style="display:flex;gap:4px;flex-wrap:wrap;">
+      <div class="gs-pcard">
+        <div class="gs-plabel">EWMA α</div>
+        <div class="gs-pdesc">smooth error — ต่ำ=smooth มาก สูง=ตอบสนองเร็ว</div>
+        <div id="gs-ewma-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.1" onclick="gsTogChip(this)">0.1</span>
           <span class="gs-chip gs-on" data-val="0.2" onclick="gsTogChip(this)">0.2</span>
           <span class="gs-chip gs-on" data-val="0.3" onclick="gsTogChip(this)">0.3</span>
           <span class="gs-chip" data-val="0.5" onclick="gsTogChip(this)">0.5</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.05" min="0" max="1" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
+          <span class="gs-chip" data-val="0.8" onclick="gsTogChip(this)">0.8</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-ewma" placeholder="เพิ่มค่า" step="0.05" min="0.01" max="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-ewma-group','gs-add-ewma')">+ Add</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Shared recalc -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div class="section-title" style="margin-bottom:4px;">🔄 Update every N pts — ใช้กับทุก threshold</div>
+    <div class="gs-note">threshold ทุกแบบใช้ค่านี้ร่วมกัน — <b>น้อย</b>=smooth บ่อย แต่ช้า | <b>มาก</b>=เส้นขั้นบันได เร็วกว่า</div>
+    <div id="gs-recalc-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+      <span class="gs-chip" data-val="1" onclick="gsTogChip(this)">1</span>
+      <span class="gs-chip" data-val="5" onclick="gsTogChip(this)">5</span>
+      <span class="gs-chip gs-on" data-val="10" onclick="gsTogChip(this)">10</span>
+      <span class="gs-chip" data-val="20" onclick="gsTogChip(this)">20</span>
+      <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+    </div>
+    <div class="gs-add-row">
+      <input type="number" id="gs-add-recalc" placeholder="เพิ่มค่า" min="1" step="1">
+      <button class="gs-add-btn" onclick="gsAddChip('gs-recalc-group','gs-add-recalc')">+ Add</button>
     </div>
   </div>
 
   <!-- Threshold params -->
   <div class="card" style="padding:14px;margin-bottom:10px;">
-    <div class="section-title" style="margin-bottom:10px;">🎛 Threshold params — sweep values + fixed params</div>
+    <div class="section-title" style="margin-bottom:4px;">🎛 Threshold params</div>
+    <div class="gs-note"><b>▸ Sweep</b> = ลองทุกค่าที่เลือก (เพิ่ม combinations) | <b>Fixed</b> = ค่าเดียวคงที่ทุก trial | ติ๊ก <b>include</b> เพื่อเอา threshold นั้นเข้า sweep</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
 
       <!-- TH1 -->
       <div style="border:1px solid #fecaca;border-left:3px solid #ef4444;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:0.72rem;font-weight:700;color:#dc2626;font-family:'JetBrains Mono',monospace;">TH1 — Sliding Percentile</span>
-          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#dc2626;font-family:'JetBrains Mono',monospace;">🔴 TH1 — Sliding Percentile</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="gs-en1" checked onchange="gsUpdateCombo()"> include
           </label>
         </div>
-        <div class="form-label" style="margin-bottom:4px;">Sweep percentile values</div>
-        <div id="gs-th1-pct-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+        <p class="param-desc" style="margin-bottom:8px;">Percentile ของ error ใน window ก่อนหน้า — ไม่ใช้ future data</p>
+
+        <div class="gs-plabel">▸ Sweep percentile</div>
+        <div id="gs-th1-pct-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="90" onclick="gsTogChip(this)">90</span>
           <span class="gs-chip" data-val="95" onclick="gsTogChip(this)">95</span>
           <span class="gs-chip gs-on" data-val="97" onclick="gsTogChip(this)">97</span>
           <span class="gs-chip gs-on" data-val="99" onclick="gsTogChip(this)">99</span>
           <span class="gs-chip" data-val="99.5" onclick="gsTogChip(this)">99.5</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.1" min="50" max="100" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
         </div>
-        <div class="form-label" style="margin-bottom:3px;">Mode</div>
-        <select id="gs-th1-mode" onchange="gsUpdateCombo()" style="margin-bottom:8px;font-size:0.75rem;">
-          <option value="sliding" selected>Sliding Window</option>
-          <option value="static">Static baseline</option>
-        </select>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th1-win">100</span></div>
-        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
-          <input type="range" data-gssync="th1-win" min="20" max="300" step="10" value="100" oninput="gsSv('th1-win',this.value);gsSyncNum('th1-win',this.value)" style="flex:1;">
-          <input id="gs-n-th1-win" type="number" value="100" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th1-win',this.value);gsSyncRng('th1-win',this.value)">
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th1pct" placeholder="เพิ่มค่า" step="0.1" min="50" max="100">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th1-pct-group','gs-add-th1pct')">+ Add</button>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Update every N</span><span id="gs-v-th1-recalc">10</span></div>
-        <div style="display:flex;gap:5px;align-items:center;">
-          <input type="range" data-gssync="th1-recalc" min="1" max="50" step="1" value="10" oninput="gsSv('th1-recalc',this.value);gsSyncNum('th1-recalc',this.value)" style="flex:1;">
-          <input id="gs-n-th1-recalc" type="number" value="10" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th1-recalc',this.value);gsSyncRng('th1-recalc',this.value)">
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th1-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="50" onclick="gsTogChip(this)">50</span>
+          <span class="gs-chip gs-on" data-val="100" onclick="gsTogChip(this)">100</span>
+          <span class="gs-chip" data-val="150" onclick="gsTogChip(this)">150</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:10px;">
+          <input type="number" id="gs-add-th1win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th1-win-group','gs-add-th1win')">+ Add</button>
+        </div>
+
+        <div style="border-top:1px dashed #fecaca;padding-top:8px;margin-top:2px;">
+          <div class="gs-plabel" style="color:#dc2626;">⚙ Fixed params</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:0.7rem;color:var(--text-2);">Mode</span>
+            <select id="gs-th1-mode" onchange="gsUpdateCombo()" style="font-size:0.72rem;flex:1;">
+              <option value="sliding" selected>Sliding Window</option>
+              <option value="static">Static baseline</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <!-- TH2 -->
       <div style="border:1px solid #bfdbfe;border-left:3px solid #3b82f6;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:0.72rem;font-weight:700;color:#1d4ed8;font-family:'JetBrains Mono',monospace;">TH2 — Sliding μ + α·σ</span>
-          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#1d4ed8;font-family:'JetBrains Mono',monospace;">🔵 TH2 — Sliding μ + α·σ</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="gs-en2" checked onchange="gsUpdateCombo()"> include
           </label>
         </div>
-        <div class="form-label" style="margin-bottom:4px;">Sweep α values</div>
-        <div id="gs-th2-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+        <p class="param-desc" style="margin-bottom:8px;">threshold = mean + α × std ปรับตาม distribution อัตโนมัติ</p>
+
+        <div class="gs-plabel">▸ Sweep α multiplier</div>
+        <div id="gs-th2-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1.5" onclick="gsTogChip(this)">1.5</span>
           <span class="gs-chip" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
           <span class="gs-chip gs-on" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
           <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
           <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th2-win">80</span></div>
-        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
-          <input type="range" data-gssync="th2-win" min="10" max="200" step="5" value="80" oninput="gsSv('th2-win',this.value);gsSyncNum('th2-win',this.value)" style="flex:1;">
-          <input id="gs-n-th2-win" type="number" value="80" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th2-win',this.value);gsSyncRng('th2-win',this.value)">
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th2alpha" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th2-alpha-group','gs-add-th2alpha')">+ Add</button>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Recalc every N</span><span id="gs-v-th2-recalc">50</span></div>
-        <div style="display:flex;gap:5px;align-items:center;">
-          <input type="range" data-gssync="th2-recalc" min="1" max="100" step="5" value="50" oninput="gsSv('th2-recalc',this.value);gsSyncNum('th2-recalc',this.value)" style="flex:1;">
-          <input id="gs-n-th2-recalc" type="number" value="50" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th2-recalc',this.value);gsSyncRng('th2-recalc',this.value)">
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th2-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="40" onclick="gsTogChip(this)">40</span>
+          <span class="gs-chip gs-on" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="120" onclick="gsTogChip(this)">120</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th2win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th2-win-group','gs-add-th2win')">+ Add</button>
         </div>
       </div>
 
       <!-- TH3 -->
       <div style="border:1px solid #bbf7d0;border-left:3px solid #10b981;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:0.72rem;font-weight:700;color:#047857;font-family:'JetBrains Mono',monospace;">TH3 — Adaptive-z</span>
-          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#047857;font-family:'JetBrains Mono',monospace;">🟢 TH3 — Adaptive-z</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="gs-en3" onchange="gsUpdateCombo()"> include
           </label>
         </div>
-        <div class="form-label" style="margin-bottom:4px;">Sweep z_min values</div>
-        <div id="gs-th3-zmin-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+        <p class="param-desc" style="margin-bottom:8px;">ปรับ z-score อัตโนมัติตาม anomaly density ใน window</p>
+
+        <div class="gs-plabel">▸ Sweep z_min</div>
+        <div id="gs-th3-zmin-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="1.0" onclick="gsTogChip(this)">1.0</span>
           <span class="gs-chip gs-on" data-val="1.5" onclick="gsTogChip(this)">1.5</span>
           <span class="gs-chip gs-on" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
           <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Window</span><span id="gs-v-th3-win">80</span></div>
-        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
-          <input type="range" data-gssync="th3-win" min="10" max="200" step="5" value="80" oninput="gsSv('th3-win',this.value);gsSyncNum('th3-win',this.value)" style="flex:1;">
-          <input id="gs-n-th3-win" type="number" value="80" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th3-win',this.value);gsSyncRng('th3-win',this.value)">
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th3zmin" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-zmin-group','gs-add-th3zmin')">+ Add</button>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Update every N</span><span id="gs-v-th3-recalc">1</span></div>
-        <div style="display:flex;gap:5px;align-items:center;">
-          <input type="range" data-gssync="th3-recalc" min="1" max="50" step="1" value="1" oninput="gsSv('th3-recalc',this.value);gsSyncNum('th3-recalc',this.value)" style="flex:1;">
-          <input id="gs-n-th3-recalc" type="number" value="1" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th3-recalc',this.value);gsSyncRng('th3-recalc',this.value)">
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep z_max</div>
+        <div id="gs-th3-zmax-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="5.0" onclick="gsTogChip(this)">5.0</span>
+          <span class="gs-chip" data-val="7.0" onclick="gsTogChip(this)">7.0</span>
+          <span class="gs-chip gs-on" data-val="10.0" onclick="gsTogChip(this)">10.0</span>
+          <span class="gs-chip" data-val="15.0" onclick="gsTogChip(this)">15.0</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th3zmax" placeholder="เพิ่มค่า" step="0.5" min="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-zmax-group','gs-add-th3zmax')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep window size</div>
+        <div id="gs-th3-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="40" onclick="gsTogChip(this)">40</span>
+          <span class="gs-chip gs-on" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="120" onclick="gsTogChip(this)">120</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th3win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th3-win-group','gs-add-th3win')">+ Add</button>
         </div>
       </div>
 
       <!-- TH4 -->
       <div style="border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:0 var(--radius) var(--radius) 0;padding:11px 13px;background:var(--bg-1);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:0.72rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono',monospace;">TH4 — Entropy-lock</span>
-          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text-2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:0.72rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono',monospace;">🟣 TH4 — Entropy-lock</span>
+          <label style="font-size:0.7rem;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="gs-en4" checked onchange="gsUpdateCombo()"> include
           </label>
         </div>
-        <div class="form-label" style="margin-bottom:4px;">Sweep α values</div>
-        <div id="gs-th4-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+        <p class="param-desc" style="margin-bottom:8px;">lock window เมื่อ entropy นิ่ง — ป้องกัน window หลวมเกิน</p>
+
+        <div class="gs-plabel">▸ Sweep α multiplier</div>
+        <div id="gs-th4-alpha-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="2.0" onclick="gsTogChip(this)">2.0</span>
           <span class="gs-chip" data-val="2.5" onclick="gsTogChip(this)">2.5</span>
           <span class="gs-chip gs-on" data-val="3.0" onclick="gsTogChip(this)">3.0</span>
           <span class="gs-chip gs-on" data-val="3.5" onclick="gsTogChip(this)">3.5</span>
           <span class="gs-chip" data-val="4.5" onclick="gsTogChip(this)">4.5</span>
-          <input class="gs-custom" type="number" placeholder="custom" step="0.5" min="0" style="width:60px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:12px;" onchange="gsUpdateCombo()">
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Max window</span><span id="gs-v-th4-win">150</span></div>
-        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
-          <input type="range" data-gssync="th4-win" min="50" max="400" step="10" value="150" oninput="gsSv('th4-win',this.value);gsSyncNum('th4-win',this.value)" style="flex:1;">
-          <input id="gs-n-th4-win" type="number" value="150" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-win',this.value);gsSyncRng('th4-win',this.value)">
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4alpha" placeholder="เพิ่มค่า" step="0.5" min="0">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-alpha-group','gs-add-th4alpha')">+ Add</button>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Entropy θ</span><span id="gs-v-th4-eth">0.95</span></div>
-        <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">
-          <input type="range" data-gssync="th4-eth" min="0.5" max="0.99" step="0.01" value="0.95" oninput="gsSv('th4-eth',parseFloat(this.value).toFixed(2));gsSyncNum('th4-eth',parseFloat(this.value).toFixed(2))" style="flex:1;">
-          <input id="gs-n-th4-eth" type="number" value="0.95" step="0.01" min="0" max="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-eth',parseFloat(this.value).toFixed(2));gsSyncRng('th4-eth',this.value)">
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep max window</div>
+        <div id="gs-th4-win-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="80" onclick="gsTogChip(this)">80</span>
+          <span class="gs-chip" data-val="100" onclick="gsTogChip(this)">100</span>
+          <span class="gs-chip gs-on" data-val="150" onclick="gsTogChip(this)">150</span>
+          <span class="gs-chip" data-val="200" onclick="gsTogChip(this)">200</span>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-2);"><span>Consecutive violations</span><span id="gs-v-th4-cons">5</span></div>
-        <div style="display:flex;gap:5px;align-items:center;">
-          <input type="range" data-gssync="th4-cons" min="1" max="20" step="1" value="5" oninput="gsSv('th4-cons',this.value);gsSyncNum('th4-cons',this.value)" style="flex:1;">
-          <input id="gs-n-th4-cons" type="number" value="5" min="1" style="width:55px;font-size:11px;" oninput="gsSv('th4-cons',this.value);gsSyncRng('th4-cons',this.value)">
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4win" placeholder="เพิ่มค่า" min="1" step="10">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-win-group','gs-add-th4win')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep consecutive violations</div>
+        <div id="gs-th4-cons-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="2" onclick="gsTogChip(this)">2</span>
+          <span class="gs-chip" data-val="3" onclick="gsTogChip(this)">3</span>
+          <span class="gs-chip gs-on" data-val="5" onclick="gsTogChip(this)">5</span>
+          <span class="gs-chip" data-val="8" onclick="gsTogChip(this)">8</span>
+          <span class="gs-chip" data-val="10" onclick="gsTogChip(this)">10</span>
+        </div>
+        <div class="gs-add-row" style="margin-bottom:8px;">
+          <input type="number" id="gs-add-th4cons" placeholder="เพิ่มค่า" min="1" step="1">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-cons-group','gs-add-th4cons')">+ Add</button>
+        </div>
+
+        <div class="gs-plabel" style="margin-top:6px;">▸ Sweep entropy threshold θ</div>
+        <div id="gs-th4-eth-group" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="gs-chip" data-val="0.80" onclick="gsTogChip(this)">0.80</span>
+          <span class="gs-chip" data-val="0.90" onclick="gsTogChip(this)">0.90</span>
+          <span class="gs-chip gs-on" data-val="0.95" onclick="gsTogChip(this)">0.95</span>
+          <span class="gs-chip" data-val="0.98" onclick="gsTogChip(this)">0.98</span>
+        </div>
+        <div class="gs-add-row">
+          <input type="number" id="gs-add-th4eth" placeholder="เพิ่มค่า" step="0.01" min="0.1" max="0.99">
+          <button class="gs-add-btn" onclick="gsAddChip('gs-th4-eth-group','gs-add-th4eth')">+ Add</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Run bar -->
+    <!-- Run bar -->
   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;">
     <div>
       <div style="font-size:0.68rem;color:var(--text-3);margin-bottom:2px;">Combinations</div>
@@ -779,7 +1027,10 @@
         </table>
       </div>
     </div>
-
+    <div class="card" style="margin-top:16px;padding:14px;">
+  <div class="section-title">📈 PR Curve (Threshold Analysis)</div>
+  <div id="pr-chart"></div>
+</div>
     <!-- Best model charts -->
     <div id="gs-best-chart-panel" class="card" style="padding:14px;display:none;">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
@@ -827,15 +1078,11 @@ const AGG_HINTS = {
 function onAggChange() {
   const v = document.getElementById('agg-method').value;
   document.getElementById('agg-hint').textContent = AGG_HINTS[v] || '';
-  // Invalidate results cache (different agg = different metrics)
   RESULTS_CACHE = null; RESULTS_CACHE_KEY = null;
-  // Reload active tab
   _reloadActiveTab();
 }
 
-function onLabelsChange() {
-  _reloadActiveTab();
-}
+function onLabelsChange() { _reloadActiveTab(); }
 
 function _reloadActiveTab() {
   const active = document.querySelector('.tab-btn.active');
@@ -846,6 +1093,54 @@ function _reloadActiveTab() {
   if (name === 'anomaly')   loadAnomalyCharts();
   if (name === 'tuner')     loadTuner();
   if (name === 'trainall')  loadModelError();
+}
+
+// ── Train All: Clear Cache ─────────────────────────────────────────
+async function taClearCache() {
+  const msg = document.getElementById('ta-clear-msg');
+  if (msg) msg.textContent = 'Clearing…';
+  try {
+    const res  = await fetch('/api/train-all/clear-cache/', {method:'POST'});
+    const data = await res.json();
+    if (msg) msg.textContent = `✓ Cleared ${data.cleared} job(s)`;
+    // Reset JS state so Results tab won't show stale data
+    BATCH_JOB_ID      = null;
+    RESULTS_CACHE     = null;
+    RESULTS_CACHE_KEY = null;
+    setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
+  } catch(e) {
+    if (msg) msg.textContent = '❌ Error';
+  }
+}
+
+// ── Train All: Load device badge (called on tab mount) ─────────────
+async function taLoadDevice() {
+  const badge = document.getElementById('ta-device-badge');
+  if (!badge) return;
+  try {
+    const res  = await fetch('/api/device-info/');
+    const data = await res.json();
+    const icon = data.device === 'cuda' ? '⚡ GPU' : data.device === 'mps' ? '🍎 MPS' : '💻 CPU';
+    const clr  = data.device === 'cuda' ? '#16a34a' : data.device === 'mps' ? '#2563eb' : '#64748b';
+    badge.innerHTML = `<span style="color:${clr};font-weight:600;">${icon}</span> ${data.detail}`;
+    badge.style.borderColor = clr;
+  } catch(e) {
+    badge.textContent = '💻 CPU (default)';
+  }
+}
+
+// ── Results: Stop/Abort computation ───────────────────────────────
+async function resultsAbort() {
+  await fetch('/api/results-abort/', {method:'POST'});
+  const stopBtn    = document.getElementById('results-stop-btn');
+  const computeBtn = document.getElementById('results-compute-btn');
+  if (stopBtn)    stopBtn.style.display    = 'none';
+  if (computeBtn) computeBtn.style.display = 'inline-flex';
+  const container = document.getElementById('results-content');
+  if (container) container.innerHTML = `
+    <div style="text-align:center;padding:32px;color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:0.8rem;">
+      ⏹ Computation stopped — กด ↻ Recompute เพื่อคำนวณใหม่
+    </div>`;
 }
 </script>
 

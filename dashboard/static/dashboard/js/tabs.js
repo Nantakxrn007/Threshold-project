@@ -17,7 +17,8 @@ function switchTab(name, btn) {
   if (name === 'anomaly')    loadAnomalyCharts();
   if (name === 'tuner')      loadTuner();
   if (name === 'results')    loadResultsTable();
-  if (name === 'gridsearch') gsUpdateCombo();   // uses cache if available
+  if (name === 'gridsearch') gsUpdateCombo();
+  if (name === 'trainall')  taLoadDevice();   // uses cache if available
 }
 
 function mountTabIfNeeded(name, tplId) {

@@ -209,3 +209,31 @@ def api_chart_model_error(request):
     fig.update_layout(**_LAYOUT, height=260,
         title=dict(text=f"{model_type} — {run_id} ({agg.upper()})", font=dict(size=12, color="#0f172a")))
     return JsonResponse(_to_json(fig))
+
+
+@csrf_exempt
+@require_POST
+def api_clear_batch_cache(request):
+    """ลบ batch jobs ทั้งหมดออกจาก memory — คืน RAM และทำให้ตอบสนองเร็วขึ้น"""
+    count = len(BATCH_JOBS)
+    BATCH_JOBS.clear()
+    return JsonResponse({"cleared": count, "message": f"Cleared {count} batch job(s) from memory"})
+
+
+@require_GET
+def api_device_info(request):
+    """บอก device ที่ใช้ train — CUDA / MPS / CPU"""
+    import torch
+    if torch.cuda.is_available():
+        device = "cuda"
+        name   = torch.cuda.get_device_name(0)
+        mem_gb = round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1)
+        detail = f"{name} ({mem_gb} GB)"
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = "mps"
+        detail = "Apple Silicon (MPS)"
+    else:
+        device = "cpu"
+        import os
+        detail = f"{os.cpu_count()} cores"
+    return JsonResponse({"device": device, "detail": detail})
