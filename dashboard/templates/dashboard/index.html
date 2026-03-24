@@ -33,6 +33,7 @@
         <button class="tab-btn" onclick="switchTab('trainall',this)">🏋️ Train All</button>
         <button class="tab-btn" onclick="switchTab('results',this)">📊 Results</button>
         <button class="tab-btn" onclick="switchTab('gridsearch',this)">🔍 Grid Search</button>
+        <button class="tab-btn" onclick="switchTab('animation',this)">🎬 Animation</button>
         <button class="tab-btn" onclick="switchTab('rawdata',this)">🗂 Raw Data</button>
       </div>
 
@@ -45,6 +46,7 @@
 {% include 'dashboard/_tpl_trainall.html' %}
 {% include 'dashboard/_tpl_results.html' %}
 {% include 'dashboard/_tpl_gridsearch.html' %}
+{% include 'dashboard/_tpl_animation.html' %}
 {% include 'dashboard/_tpl_rawdata.html' %}
 
 <!-- Django context → JS constants -->
@@ -62,6 +64,7 @@ const MODEL_LIST   = {{ model_choices|safe }};
 <script src="{% static 'dashboard/js/charts.js' %}"></script>
 <script src="{% static 'dashboard/js/results.js' %}"></script>
 <script src="{% static 'dashboard/js/grid_search.js' %}"></script>
+<script src="{% static 'dashboard/js/animation.js' %}"></script>
 <script src="{% static 'dashboard/js/rawdata.js' %}"></script>
 
 {% include 'dashboard/_inline_script.html' %}

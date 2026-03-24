@@ -28,6 +28,9 @@ urlpatterns = [
     path("api/results-abort/",                views.api_results_abort,       name="api_results_abort"),
     path("api/pr-curve/",                     views.api_pr_curve,            name="api_pr_curve"),
 
+    # Animation
+    path("api/animation/data/",  views.api_animation_data, name="api_animation_data"),
+
     # Raw Data Editor
     path("api/rawdata/run/",    views.api_rawdata_run,    name="api_rawdata_run"),
     path("api/rawdata/patch/",  views.api_rawdata_patch,  name="api_rawdata_patch"),

@@ -1,0 +1,182 @@
+<!-- dashboard/templates/dashboard/_tpl_animation.html -->
+<div id="tab-animation" class="tab-panel">
+<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+
+  <!-- ── Left: Setup Panel ─────────────────────────────────────── -->
+  <div style="width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;">
+
+    <!-- Run selector -->
+    <div class="card" style="padding:12px;">
+      <div class="section-title" style="font-size:0.78rem;margin-bottom:10px;">⚙ Setup</div>
+
+      <div class="form-group">
+        <label class="form-label">Run ID</label>
+        <select id="anim-run">
+          {% for r in all_runs %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Aggregation</label>
+        <select id="anim-agg">
+          <option value="mean" selected>Mean</option>
+          <option value="max">Max</option>
+          <option value="l2">L2</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" style="font-size:0.78rem;padding:7px 12px;"
+              onclick="loadAnimationData()">
+        ⬇ Load Data
+      </button>
+    </div>
+
+    <!-- Threshold toggles -->
+    <div class="card" style="padding:12px;">
+      <div class="section-title" style="font-size:0.78rem;margin-bottom:8px;">📉 Thresholds</div>
+      <p style="font-size:0.68rem;color:var(--text-3);margin-bottom:8px;font-family:'JetBrains Mono',monospace;">
+        ค่า param ดึงจาก Tuner อัตโนมัติ
+      </p>
+
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#ca8a04;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="anim-th" value="P99 Static" checked
+               style="accent-color:#ca8a04;width:14px;height:14px;">
+        🟡 P99 Static
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#3b82f6;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="anim-th" value="Sliding Mu+αStd" checked
+               style="accent-color:#3b82f6;width:14px;height:14px;">
+        🔵 Sliding μ+ασ
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#10b981;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="anim-th" value="Adaptive-z" checked
+               style="accent-color:#10b981;width:14px;height:14px;">
+        🟢 Adaptive-z
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:#7c3aed;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="anim-th" value="Entropy-lock" checked
+               style="accent-color:#7c3aed;width:14px;height:14px;">
+        🟣 Entropy-lock
+      </label>
+    </div>
+
+    <!-- Overlay toggles -->
+    <div class="card" style="padding:12px;">
+      <div class="section-title" style="font-size:0.78rem;margin-bottom:8px;">🎨 Overlays</div>
+
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-2);margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="anim-show-bands" checked
+               style="accent-color:var(--accent);width:14px;height:14px;">
+        Detection bands
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.75rem;color:var(--text-2);cursor:pointer;">
+        <input type="checkbox" id="anim-show-labels"
+               style="accent-color:#dc2626;width:14px;height:14px;">
+        Anomaly labels
+      </label>
+    </div>
+
+    <!-- Speed + step -->
+    <div class="card" style="padding:12px;">
+      <div class="section-title" style="font-size:0.78rem;margin-bottom:8px;">⏩ Playback</div>
+
+      <div class="form-group">
+        <div class="range-row">
+          <label class="form-label" style="margin:0;">Speed (ms/tick)</label>
+          <span class="range-val" id="anim-speed-val">30</span>
+        </div>
+        <input type="range" id="anim-speed" min="10" max="500" step="5" value="30"
+               oninput="document.getElementById('anim-speed-val').textContent=this.value">
+        <div style="display:flex;justify-content:space-between;font-size:0.63rem;color:var(--text-3);margin-top:2px;">
+          <span>Fast (10)</span><span>Slow (500)</span>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <div class="range-row">
+          <label class="form-label" style="margin:0;">Points/tick</label>
+          <span class="range-val" id="anim-step-val">1</span>
+        </div>
+        <input type="range" id="anim-step" min="1" max="20" step="1" value="1"
+               oninput="document.getElementById('anim-step-val').textContent=this.value">
+        <div style="display:flex;justify-content:space-between;font-size:0.63rem;color:var(--text-3);margin-top:2px;">
+          <span>1 pt</span><span>20 pts</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /setup panel -->
+
+  <!-- ── Right: Charts + Controls ─────────────────────────────── -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:0;">
+
+    <!-- Status bar -->
+    <div class="card" style="padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span id="anim-status"
+            style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--text-3);flex:1;min-width:120px;">
+        ⬅ เลือก run แล้วกด Load Data
+      </span>
+      <span id="anim-frame-lbl"
+            style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--accent);white-space:nowrap;">
+        — / —
+      </span>
+    </div>
+
+    <!-- Progress bar (clickable scrub) -->
+    <div style="margin-bottom:8px;">
+      <div id="anim-progress-wrap"
+           style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;cursor:pointer;position:relative;"
+           onclick="animScrub(event)">
+        <div id="anim-progress-bar"
+             style="height:100%;background:var(--accent);border-radius:4px;width:0%;transition:width 0.05s linear;"></div>
+      </div>
+      <input type="range" id="anim-seek" min="0" max="100" value="0" step="1"
+             style="width:100%;margin-top:4px;accent-color:var(--accent);"
+             oninput="animSeek(this.value)">
+    </div>
+
+    <!-- Play controls -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+      <button id="anim-play-btn" class="btn btn-primary" disabled
+              style="width:auto;padding:7px 20px;font-size:0.82rem;"
+              onclick="animPlay()">
+        ▶ Play
+      </button>
+      <button id="anim-reset-btn" class="btn" disabled
+              style="width:auto;padding:7px 16px;font-size:0.82rem;background:var(--bg-2);color:var(--text-2);border:1px solid var(--border);"
+              onclick="animReset()">
+        ⏮ Reset
+      </button>
+      <button class="btn"
+              style="width:auto;padding:7px 16px;font-size:0.82rem;background:var(--bg-2);color:var(--text-2);border:1px solid var(--border);"
+              onclick="loadAnimationData()">
+        ↺ Reload
+      </button>
+    </div>
+
+    <!-- 5 stacked charts -->
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <!-- Sensor charts 1-4 -->
+      <div class="card" style="padding:8px 10px;">
+        <div id="anim-c1"></div>
+      </div>
+      <div class="card" style="padding:8px 10px;">
+        <div id="anim-c2"></div>
+      </div>
+      <div class="card" style="padding:8px 10px;">
+        <div id="anim-c3"></div>
+      </div>
+      <div class="card" style="padding:8px 10px;">
+        <div id="anim-c4"></div>
+      </div>
+      <!-- Error + threshold chart -->
+      <div class="card" style="padding:8px 10px;border-top:2px solid var(--border-2);">
+        <div id="anim-c5"></div>
+      </div>
+    </div>
+
+  </div><!-- /charts column -->
+</div><!-- /flex row -->
+</div><!-- /tab-animation -->

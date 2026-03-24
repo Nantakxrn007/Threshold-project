@@ -1,5 +1,6 @@
 # dashboard/views/__init__.py
 """Re-export all views so urls.py stays unchanged."""
+from .animation  import api_animation_data
 from .pages       import index
 from .single      import (api_train, api_status,
                            api_chart_umap, api_chart_raw, api_chart_error,
