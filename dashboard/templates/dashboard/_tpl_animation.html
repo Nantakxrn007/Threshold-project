@@ -110,9 +110,8 @@
   </div><!-- /setup panel -->
 
   <!-- ── Right: Charts + Controls ─────────────────────────────── -->
-  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:0;">
+  <div style="flex:1;min-width:0;max-width:1000px;display:flex;flex-direction:column;gap:0;">
 
-    <!-- Status bar -->
     <div class="card" style="padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
       <span id="anim-status"
             style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--text-3);flex:1;min-width:120px;">
@@ -124,7 +123,6 @@
       </span>
     </div>
 
-    <!-- Progress bar (clickable scrub) -->
     <div style="margin-bottom:8px;">
       <div id="anim-progress-wrap"
            style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;cursor:pointer;position:relative;"
@@ -137,7 +135,6 @@
              oninput="animSeek(this.value)">
     </div>
 
-    <!-- Play controls -->
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
       <button id="anim-play-btn" class="btn btn-primary" disabled
               style="width:auto;padding:7px 20px;font-size:0.82rem;"
@@ -156,26 +153,25 @@
       </button>
     </div>
 
-    <!-- 5 stacked charts -->
-    <div style="display:flex;flex-direction:column;gap:4px;">
-      <!-- Sensor charts 1-4 -->
-      <div class="card" style="padding:8px 10px;">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <div class="card" style="padding:2px 8px;">
         <div id="anim-c1"></div>
       </div>
-      <div class="card" style="padding:8px 10px;">
+      <div class="card" style="padding:2px 8px;">
         <div id="anim-c2"></div>
       </div>
-      <div class="card" style="padding:8px 10px;">
+      <div class="card" style="padding:2px 8px;">
         <div id="anim-c3"></div>
       </div>
-      <div class="card" style="padding:8px 10px;">
+      <div class="card" style="padding:2px 8px;">
         <div id="anim-c4"></div>
       </div>
-      <!-- Error + threshold chart -->
-      <div class="card" style="padding:8px 10px;border-top:2px solid var(--border-2);">
+      <div class="card" style="padding:6px 8px;border-top:2px solid var(--border-2);margin-top:4px;">
         <div id="anim-c5"></div>
       </div>
     </div>
+
+  </div>
 
   </div><!-- /charts column -->
 </div><!-- /flex row -->

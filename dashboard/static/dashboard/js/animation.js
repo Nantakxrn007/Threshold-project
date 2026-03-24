@@ -3,10 +3,9 @@
 
 (function () {
 
-// ── State ─────────────────────────────────────────────────────────
-let _data      = null;   // fetched payload
-let _frame     = 0;      // current frame index
-let _timer     = null;   // setInterval handle
+let _data      = null;   
+let _frame     = 0;      
+let _timer     = null;   
 let _playing   = false;
 
 const SENSOR_ORDER  = ['conductivity', 'pH', 'temperature', 'voltage'];
@@ -28,23 +27,23 @@ const CHART_IDS = ['anim-c1','anim-c2','anim-c3','anim-c4','anim-c5'];
 const PLOT_CFG  = { displayModeBar: false, responsive: true };
 
 // ── Layout factory ─────────────────────────────────────────────────
-function _baseLayout(title, yTitle, height, yRange, xMax = null) {
+function _baseLayout(title, yTitle, height, xMax, showXAxis = true) {
   return {
     height,
     paper_bgcolor: '#ffffff',
     plot_bgcolor:  '#f8fafc',
-    margin:        { l:52, r:16, t:20, b:20 },
+    margin:        { l:45, r:10, t:20, b: showXAxis ? 25 : 5 }, // ลดขอบบน/ล่าง
     font:  { family: 'Inter, system-ui, sans-serif', color: '#64748b', size: 10 },
-    title: { text: title, font: { size: 11, color: '#0f172a' }, x: 0.01 },
+    title: { text: title, font: { size: 11, color: '#0f172a' }, x: 0.01, y: 0.95 },
     xaxis: { 
       gridcolor:'#e2e8f0', linecolor:'#e2e8f0', color:'#94a3b8', zeroline:false,
-      range: xMax !== null ? [0, xMax] : undefined
+      range: xMax !== null ? [0, xMax] : undefined,
+      showticklabels: showXAxis // ปิดเลขแกน X ถ้าเป็นกราฟบนๆ จะได้แนบติดกัน
     },
     yaxis: {
       gridcolor:'#e2e8f0', linecolor:'#e2e8f0', color:'#94a3b8', zeroline:false,
-      title: { text: yTitle, font: { size: 9 }, standoff: 4 },
-      // รองรับการรับค่า Range แบบ Array [min, max]
-      range: Array.isArray(yRange) ? yRange : [0, yRange], 
+      title: { text: yTitle, font: { size: 9 }, standoff: 2 },
+      autorange: true, // เปิดให้ยืดหยุ่น Auto Scale เต็มที่
     },
     hovermode: 'x unified',
     hoverlabel: {
@@ -58,22 +57,20 @@ function _baseLayout(title, yTitle, height, yRange, xMax = null) {
   };
 }
 
-// ── Init empty charts (placeholder before data loads) ──────────────
+// ── Init empty charts ──────────────────────────────
 function _initEmptyCharts() {
   CHART_IDS.forEach((id, i) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const title = i < 4 ? `📡 ${SENSOR_ORDER[i]}` : '📈 Reconstruction Error';
-    Plotly.newPlot(id, [], _baseLayout(title, '', i < 4 ? 100 : 130, [0, 1]), PLOT_CFG);
+    const isError = i === 4;
+    const title = isError ? '📈 Reconstruction Error' : `📡 ${SENSOR_ORDER[i]}`;
+    const h = isError ? 280 : 70; // Error สูงๆ(280), เซ็นเซอร์แบนๆ(70)
+    Plotly.newPlot(id, [], _baseLayout(title, '', h, null, isError), PLOT_CFG);
   });
 }
 
-// ── Fetch animation data from backend ─────────────────────────────
 async function loadAnimationData() {
-  if (!JOB_ID) {
-    _setStatus('⚠ Train a model first.', 'amber');
-    return;
-  }
+  if (!JOB_ID) { _setStatus('⚠ Train a model first.', 'amber'); return; }
   const run    = document.getElementById('anim-run').value;
   const agg    = document.getElementById('anim-agg').value;
   const params = _buildThParams();
@@ -97,7 +94,6 @@ async function loadAnimationData() {
   }
 }
 
-// ── Build threshold query params from sidebar values ──────────────
 function _buildThParams() {
   const ids = [
     'th1_pct','th1_mode','th1_win','th1_recalc',
@@ -112,7 +108,6 @@ function _buildThParams() {
   }).filter(Boolean).join('&');
 }
 
-// ── Render a single frame (0-indexed, inclusive) ───────────────────
 function _renderFrame(endIdx) {
   if (!_data) return;
   const currentN = endIdx + 1; 
@@ -122,29 +117,18 @@ function _renderFrame(endIdx) {
   const showTH    = _getChecked('anim-th');
   const showLbl   = document.getElementById('anim-show-labels')?.checked;
   const showBands = document.getElementById('anim-show-bands')?.checked;
-  const errMax    = _data.y_range.err_max;
 
   // ── Charts 1-4: Raw sensors ────────────────────────────────────
   SENSOR_ORDER.forEach((sensor, ci) => {
     const chartId  = CHART_IDS[ci];
-    const fullArr  = _data.raw[sensor] ?? [];
-    const yArr     = fullArr.slice(0, currentN);
+    const yArr     = _data.raw[sensor]?.slice(0, currentN) ?? [];
     
-    // ค้นหา Min/Max ของข้อมูลทั้งหมด เพื่อล็อคแกน Y แบบซูมพอดี
-    const vMax = fullArr.length ? Math.max(...fullArr) : 1;
-    const vMin = fullArr.length ? Math.min(...fullArr) : 0;
-    const diff = vMax - vMin;
-    // เพิ่ม Padding 15% บน-ล่าง ให้กราฟไม่ชิดขอบเกินไป
-    const pad  = diff === 0 ? (vMax === 0 ? 1 : Math.abs(vMax) * 0.1) : diff * 0.15;
-    const yRange = [vMin - pad, vMax + pad];
-
     const traces   = [{
       x: idx, y: yArr,
       mode: 'lines', name: sensor,
       line: { color: SENSOR_COLORS[sensor], width: 1.8 },
     }];
 
-    // Per-sensor anomaly label markers
     if (showLbl && _data.has_labels) {
       const lbl    = _data.labels.per_sensor?.[sensor] ?? [];
       const aMask  = lbl.slice(0, currentN).map((v,i) => v ? i : -1).filter(i => i >= 0);
@@ -161,14 +145,8 @@ function _renderFrame(endIdx) {
       }
     }
 
-    const layout = _baseLayout(`📡 ${sensor}`, SENSOR_UNITS[sensor] || '', 100, yRange, xMax);
+    const layout = _baseLayout(`📡 ${sensor}`, SENSOR_UNITS[sensor] || '', 70, xMax, false);
     
-    if (currentN > 1) {
-      layout.shapes = [{
-        type:'line', x0: currentN-1, x1: currentN-1, y0:0, y1:1, yref:'paper',
-        line:{ color:'rgba(239,68,68,0.5)', width:1, dash:'dot' }
-      }];
-    }
     Plotly.react(chartId, traces, layout, PLOT_CFG);
   });
 
@@ -180,6 +158,10 @@ function _renderFrame(endIdx) {
     line: { color: '#0f172a', width: 2 },
     fill: 'tozeroy', fillcolor: 'rgba(15,23,42,0.04)',
   }];
+
+  const layout5 = _baseLayout('📈 Reconstruction Error', 'error', 280, xMax, true);
+  layout5.shapes = []; // ใช้ Shapes สร้าง Background แทน Traces เพื่อไม่ให้กวน Auto-Scale แกน Y
+  
 
   showTH.forEach(thName => {
     const thVals = _data.thresholds[thName]?.slice(0, currentN);
@@ -201,27 +183,25 @@ function _renderFrame(endIdx) {
         let start  = exceeded[0];
         let prev   = exceeded[0];
         for (let k = 1; k < exceeded.length; k++) {
-          if (exceeded[k] !== prev + 1) {
-            segs.push([start, prev]);
-            start = exceeded[k];
-          }
+          if (exceeded[k] !== prev + 1) { segs.push([start, prev]); start = exceeded[k]; }
           prev = exceeded[k];
         }
         segs.push([start, prev]);
 
         segs.forEach((seg, si) => {
-          const x0 = seg[0] - 0.5, x1 = seg[1] + 0.5;
-          traces5.push({
-            x: [x0, x1, x1, x0, x0],
-            y: [0, 0, errMax, errMax, 0],
-            mode: 'lines', fill: 'toself',
-            fillcolor: TH_FILLS[thName],
-            line: { width: 0 },
-            name: `${thName} band`,
-            legendgroup: `band_${thName}`,
-            showlegend: si === 0,
-            legendrank: 1000,
-            hoverinfo: 'skip',
+          if (si === 0) {
+            // Dummy trace เอาไว้โชว์แค่ใน Legend เท่านั้น
+            traces5.push({
+              x: [null], y: [null], mode: 'lines',
+              line: { width: 10, color: TH_FILLS[thName].replace(/0\.18\)/, '0.5)') },
+              name: `${thName} band`, legendgroup: `band_${thName}`, showlegend: true
+            });
+          }
+          layout5.shapes.push({
+            type: 'rect', xref: 'x', yref: 'paper',
+            x0: seg[0] - 0.5, x1: seg[1] + 0.5,
+            y0: 0, y1: 1, fillcolor: TH_FILLS[thName],
+            line: { width: 0 }, layer: 'below'
           });
         });
       }
@@ -237,42 +217,36 @@ function _renderFrame(endIdx) {
       if (!v && inSeg)  { asegs.push([ss, i-1]); inSeg = false; }
     });
     if (inSeg) asegs.push([ss, currentN-1]);
-    asegs.forEach((seg, si) => {
+
+    if (asegs.length > 0) {
       traces5.push({
-        x: [seg[0]-0.5, seg[1]+0.5, seg[1]+0.5, seg[0]-0.5, seg[0]-0.5],
-        y: [0,0,errMax,errMax,0],
-        mode: 'lines', fill: 'toself',
-        fillcolor: 'rgba(220,38,38,0.10)',
-        line: { width: 0 },
-        name: '⚠ Anomaly Label',
-        legendgroup: 'anom_lbl',
-        showlegend: si === 0,
-        legendrank: 2000,
-        hoverinfo: 'skip',
+        x: [null], y: [null], mode: 'lines',
+        line: { width: 10, color: 'rgba(220,38,38,0.3)' },
+        name: '⚠ Anomaly Label', legendgroup: 'anom_lbl', showlegend: true
       });
-    });
+      asegs.forEach((seg) => {
+        layout5.shapes.push({
+          type: 'rect', xref: 'x', yref: 'paper',
+          x0: seg[0] - 0.5, x1: seg[1] + 0.5,
+          y0: 0, y1: 1, fillcolor: 'rgba(220,38,38,0.10)',
+          line: { width: 0 }, layer: 'below'
+        });
+      });
+    }
   }
 
-  // Error graph เริ่มจาก 0 ได้ปกติ
-  const layout5 = _baseLayout('📈 Reconstruction Error', 'error', 130, [0, errMax], xMax);
-  if (currentN > 1) {
-    layout5.shapes = [{
-      type:'line', x0:currentN-1, x1:currentN-1, y0:0, y1:1, yref:'paper',
-      line:{ color:'rgba(239,68,68,0.5)', width:1, dash:'dot' }
-    }];
-  }
   Plotly.react(CHART_IDS[4], traces5, layout5, PLOT_CFG);
 }
 
 // ── Playback controls ─────────────────────────────────────────────
 function _getSpeed() {
   const s = parseInt(document.getElementById('anim-speed')?.value);
-  return isNaN(s) || s < 1 ? 30 : s; // รับค่าตัวเลขอะไรก็ได้ ถ้ากรอกผิดให้ใช้ 30
+  return isNaN(s) || s < 1 ? 30 : s; 
 }
 
 function _getStep() {
   const s = parseInt(document.getElementById('anim-step')?.value);
-  return isNaN(s) || s < 1 ? 1 : s; // รับค่าตัวเลขอะไรก็ได้ ถ้ากรอกผิดให้ใช้ 1
+  return isNaN(s) || s < 1 ? 1 : s; 
 }
 
 function animPlay() {
@@ -318,7 +292,6 @@ function animStop() {
   if (_data) { _renderFrame(0); }
 }
 
-// ── Scrub (clicking progress bar) ────────────────────────────────
 function animScrub(e) {
   if (!_data) return;
   const bar  = document.getElementById('anim-progress-wrap');
@@ -329,7 +302,6 @@ function animScrub(e) {
   _updateProgressUI();
 }
 
-// ── Frame scrubber input ──────────────────────────────────────────
 function animSeek(val) {
   if (!_data) return;
   _frame = Math.max(0, Math.min(_data.n - 1, parseInt(val)));
@@ -337,7 +309,6 @@ function animSeek(val) {
   _updateProgressUI();
 }
 
-// ── UI helpers ────────────────────────────────────────────────────
 function _updateProgressUI() {
   const n   = _data?.n ?? 1;
   const pct = n > 1 ? (_frame / (n - 1)) * 100 : 0;
@@ -361,7 +332,6 @@ function _getChecked(name) {
   return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(el => el.value);
 }
 
-// ── Expose to global ──────────────────────────────────────────────
 window.loadAnimationData = loadAnimationData;
 window.animPlay          = animPlay;
 window.animReset         = animReset;
@@ -369,7 +339,6 @@ window.animStop          = animStop;
 window.animScrub         = animScrub;
 window.animSeek          = animSeek;
 
-// Init empty charts when tab first becomes visible
 document.addEventListener('DOMContentLoaded', () => {
   const observer = new MutationObserver(() => {
     const panel = document.getElementById('tab-animation');
