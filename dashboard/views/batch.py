@@ -9,6 +9,9 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+# Stop flags per job — set via api_stop_batch
+STOP_FLAGS: dict = {}
+
 from ._shared import (
     DF, BATCH_JOBS, NORMAL_RUNS, ANOMALY_RUNS, ALL_RUNS,
     MODEL_CHOICES, FEATS, TH_COLORS, _LAYOUT, _to_json,
@@ -50,6 +53,11 @@ def api_train_all(request):
         try:
             df_normal = DF[DF["run_id"].isin(NORMAL_RUNS)]
             for model_type in MODEL_CHOICES:
+                # Check stop flag
+                if STOP_FLAGS.get(job_id):
+                    BATCH_JOBS[job_id]["status"] = "stopped"
+                    STOP_FLAGS.pop(job_id, None)
+                    return
                 BATCH_JOBS[job_id]["progress"][model_type]["status"] = "training"
                 pipe = Pipeline(
                     model_type=model_type,
@@ -196,12 +204,47 @@ def api_chart_model_error(request):
             mode="lines", name=name,
             line=dict(color=TH_COLORS[name], dash=dash, width=1.6),
         ))
-    anom = np.where(err_vals > th1)[0]
-    if len(anom):
-        for g in np.split(anom, np.where(np.diff(anom) != 1)[0] + 1):
-            if len(g):
-                fig.add_vrect(x0=int(g[0]), x1=int(g[-1]),
-                    fillcolor="rgba(239,68,68,0.07)", layer="below", line_width=0)
+    _TH_BAND = {
+        "P99 Static":      ("rgba(234,179,8,0.18)",    "rgba(234,179,8,0.65)",   "#ca8a04"),
+        "Sliding Mu+αStd": ("rgba(59,130,246,0.13)",  "rgba(59,130,246,0.55)",  "#3b82f6"),
+        "Adaptive-z":      ("rgba(16,185,129,0.13)",  "rgba(16,185,129,0.55)",  "#10b981"),
+        "Entropy-lock":    ("rgba(124,58,237,0.13)",  "rgba(124,58,237,0.55)",  "#7c3aed"),
+    }
+    y_max = float(dfr["overall_error"].max()) * 1.15 or 1.0
+    for _thn, _thv in [("P99 Static",th1),("Sliding Mu+αStd",th2),
+                        ("Adaptive-z",th3),("Entropy-lock",th4)]:
+        fill_rgba, marker_rgba, line_hex = _TH_BAND[_thn]
+        _anom = np.where(err_vals > _thv)[0]
+        band_group = f"band_{_thn}"
+        if not len(_anom):
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None], mode="markers",
+                name=f"{_thn} band",
+                legendgroup=band_group,
+                showlegend=True,
+                marker=dict(size=10, color=marker_rgba, symbol="square",
+                            line=dict(width=1, color=line_hex)),
+                hoverinfo="skip",
+            ))
+            continue
+        segs = np.split(_anom, np.where(np.diff(_anom)!=1)[0]+1)
+        for i, _g in enumerate(segs):
+            if len(_g):
+                x0, x1 = int(_g[0])-0.5, int(_g[-1])+0.5
+                fig.add_trace(go.Scatter(
+                    x=[x0, x1, x1, x0, x0],
+                    y=[0, 0, y_max, y_max, 0],
+                    mode="lines", fill="toself",
+                    fillcolor=fill_rgba,
+                    line=dict(width=0),
+                    name=f"{_thn} band",
+                    legendgroup=band_group,
+                    showlegend=(i == 0),
+                    legendrank=1000,
+                    marker=dict(color=marker_rgba, symbol="square",
+                                line=dict(width=1, color=line_hex)),
+                    hoverinfo="skip",
+                ))
 
     if show_labels:
         fig = _add_anomaly_marks(fig, df_raw, show_raw=False)
@@ -237,3 +280,20 @@ def api_device_info(request):
         import os
         detail = f"{os.cpu_count()} cores"
     return JsonResponse({"device": device, "detail": detail})
+
+
+@csrf_exempt
+@require_POST
+def api_stop_batch(request):
+    """Stop a running batch job and clear its results from memory."""
+    p      = json.loads(request.body) if request.body else {}
+    job_id = p.get("job_id") or p.get("job") or ""
+    # Set stop flag — worker checks between models
+    if job_id and job_id in BATCH_JOBS:
+        STOP_FLAGS[job_id] = True
+        BATCH_JOBS[job_id]["status"] = "stopping"
+    # Also clear all batch jobs to free RAM
+    cleared = len(BATCH_JOBS)
+    BATCH_JOBS.clear()
+    STOP_FLAGS.clear()
+    return JsonResponse({"ok": True, "cleared": cleared})

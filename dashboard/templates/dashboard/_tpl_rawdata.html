@@ -1,0 +1,103 @@
+<template id="tpl-rawdata">
+<div class="tab-panel-tpl">
+
+  <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+  <div class="card" style="padding:12px 16px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="section-title" style="margin:0;">🗂 Raw Data Editor</div>
+
+      <div class="form-group" style="margin:0;min-width:140px;">
+        <label class="form-label">Run</label>
+        <select id="rd-run" onchange="rdLoad()" style="font-size:0.75rem;">
+          {% for r in all_runs %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin:0;min-width:120px;">
+        <label class="form-label">Sensor</label>
+        <select id="rd-sensor" onchange="rdRenderChart()" style="font-size:0.75rem;">
+          <option value="conductivity">Conductivity</option>
+          <option value="pH">pH</option>
+          <option value="temperature">Temperature</option>
+          <option value="voltage">Voltage</option>
+        </select>
+      </div>
+
+      <div style="height:28px;width:1px;background:var(--border);"></div>
+
+      <!-- Edit mode -->
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span style="font-size:0.72rem;color:var(--text-3);">Mode:</span>
+        <button id="rd-mode-view" class="rd-mode-btn rd-active" onclick="rdSetMode('view')">👁 View</button>
+        <button id="rd-mode-add"  class="rd-mode-btn" onclick="rdSetMode('add')">➕ Add anomaly</button>
+        <button id="rd-mode-del"  class="rd-mode-btn" onclick="rdSetMode('delete')">🗑 Remove anomaly</button>
+      </div>
+
+      <div style="height:28px;width:1px;background:var(--border);"></div>
+
+      <button onclick="rdUndo()" title="Undo" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg);font-size:0.8rem;cursor:pointer;" id="rd-undo-btn" disabled>↩ Undo</button>
+      <button onclick="rdReset()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg);font-size:0.73rem;cursor:pointer;color:var(--text-2);">↺ Reset</button>
+
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <button onclick="rdExportCSV()" class="btn btn-primary" style="width:auto;padding:6px 16px;font-size:0.78rem;" title="Export ทุก run พร้อม labels ที่แก้แล้ว">⬇ Export All Runs CSV</button>
+        <button onclick="rdExportThisRun()" style="padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--text-2);" title="Export เฉพาะ run นี้">⬇ This Run</button>
+      </div>
+    </div>
+
+    <!-- Mode hint -->
+    <div id="rd-mode-hint" style="font-size:0.68rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:6px;min-height:14px;">
+      👁 View only — เลือก mode เพื่อแก้ไข label
+    </div>
+  </div>
+
+  <!-- ── Chart ─────────────────────────────────────────────────────── -->
+  <div class="card" style="padding:14px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:0.72rem;font-weight:600;color:var(--text-2);">Sensor Chart — <span id="rd-chart-title">—</span></div>
+      <div style="font-size:0.68rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;">
+        แถบแดง = Anomaly label &nbsp;|&nbsp; คลิก+ลาก = เลือกช่วง
+      </div>
+    </div>
+    <div id="rd-chart" style="min-height:300px;"></div>
+  </div>
+
+  <!-- ── Stats + Table ─────────────────────────────────────────────── -->
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;">
+
+    <!-- Stats sidebar -->
+    <div class="card" style="padding:14px;min-width:200px;">
+      <div class="section-title" style="margin-bottom:10px;">📋 Label Stats</div>
+      <div id="rd-stats" style="font-size:0.75rem;color:var(--text-2);line-height:2;">
+        —
+      </div>
+      <div class="divider" style="margin:10px 0;"></div>
+      <div style="font-size:0.68rem;color:var(--text-3);line-height:1.6;">
+        <b>Sensors:</b><br>
+        <div id="rd-per-sensor-stats"></div>
+      </div>
+    </div>
+
+    <!-- Data table -->
+    <div class="card" style="padding:14px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <div class="section-title" style="margin:0;">Data Table</div>
+        <input id="rd-search" type="text" placeholder="🔍 Filter rows…"
+               style="font-size:0.73rem;padding:4px 10px;border:1px solid var(--border);border-radius:5px;width:180px;"
+               oninput="rdFilterTable(this.value)">
+        <label style="font-size:0.72rem;color:var(--text-2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="rd-anomaly-only" onchange="rdFilterTable(document.getElementById('rd-search').value)">
+          Anomaly rows only
+        </label>
+        <span id="rd-table-count" style="font-size:0.68rem;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-left:auto;"></span>
+      </div>
+      <div style="overflow:auto;max-height:400px;">
+        <table id="rd-table" style="width:100%;border-collapse:collapse;font-size:0.72rem;font-family:'JetBrains Mono',monospace;">
+          <thead id="rd-thead" style="position:sticky;top:0;background:var(--bg);z-index:1;"></thead>
+          <tbody id="rd-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+</template>

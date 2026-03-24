@@ -73,4 +73,23 @@ async function resultsAbort() {
       ⏹ Computation stopped — กด ↻ Recompute เพื่อคำนวณใหม่
     </div>`;
 }
+
+// ── Sidebar chips (hidden / layers / batch) ────────────────────────
+function sidChip(el, inputId) {
+  const parent = el.parentElement;
+  parent.querySelectorAll('.sidebar-chip').forEach(c => c.classList.remove('sid-on'));
+  el.classList.add('sid-on');
+  document.getElementById(inputId).value = el.textContent.trim();
+}
+
+function sidSyncChips(input, groupId) {
+  const val = input.value.trim();
+  document.querySelectorAll(`#${groupId}`).forEach(() => {});
+  // find chip group preceding the input
+  const chips = input.previousElementSibling?.querySelectorAll?.('.sidebar-chip') || [];
+  chips.forEach(c => {
+    c.classList.toggle('sid-on', c.textContent.trim() === val);
+  });
+}
+
 </script>

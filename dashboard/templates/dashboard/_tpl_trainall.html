@@ -11,6 +11,7 @@
         <select id="ta-hidden">
           <option value="8">8</option><option value="16" selected>16</option>
           <option value="32">32</option><option value="64">64</option>
+          <option value="128">128</option><option value="256">256</option>
         </select></div>
       <div class="form-group"><label class="form-label">Layers</label>
         <select id="ta-layers">
@@ -25,6 +26,12 @@
       <div class="form-group"><label class="form-label">EWMA α</label>
         <input type="number" id="ta-ewma" value="0.3" step="0.05" min="0.01" max="1" style="width:100%"></div>
       <button class="btn btn-primary" id="ta-btn-train" onclick="startTrainAll()">🏋️ Train All Models</button>
+      <button id="ta-stop-btn" onclick="taStopTrainAll()"
+              style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:var(--radius);
+                     border:1px solid var(--red);background:#fef2f2;color:var(--red);
+                     font-size:0.8rem;font-weight:600;cursor:pointer;">
+        ⏹ Stop &amp; Clear Cache
+      </button>
       <div id="ta-msg" style="font-size:0.73rem;color:var(--text-2);font-family:'JetBrains Mono',monospace;margin-top:6px;min-height:18px;"></div>
 
       <div class="divider" style="margin:10px 0;"></div>

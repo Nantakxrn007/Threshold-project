@@ -3,6 +3,8 @@
 async function startTrainAll() {
   const btn = document.getElementById('ta-btn-train');
   btn.disabled = true; btn.textContent = '⏳ Training…';
+  const stopBtn = document.getElementById('ta-stop-btn');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
   document.getElementById('ta-msg').textContent = 'Starting…';
 
   const tbody = document.getElementById('ta-progress-tbody');
@@ -50,17 +52,25 @@ function pollTrainAll() {
       clearInterval(BATCH_POLL);
       document.getElementById('ta-btn-train').disabled = false;
       document.getElementById('ta-btn-train').textContent = '🏋️ Train All Models';
+      const sb1 = document.getElementById('ta-stop-btn'); if (sb1) sb1.style.display='none';
       document.getElementById('ta-msg').innerHTML = '<span class="status-dot status-done"></span>All models trained! Go to 📊 Results to evaluate.';
       const sel = document.getElementById('ta-inspect-model');
       if (sel) sel.innerHTML = MODEL_LIST.map(m => `<option value="${m}">${m}</option>`).join('');
       document.getElementById('ta-pca-section').style.display = 'block';
       loadAllPcas();
       loadModelError();
+    } else if (data.status === 'stopped') {
+      clearInterval(BATCH_POLL);
+      document.getElementById('ta-btn-train').disabled = false;
+      document.getElementById('ta-btn-train').textContent = '🏋️ Train All Models';
+      const sb3 = document.getElementById('ta-stop-btn'); if (sb3) sb3.style.display='none';
+      document.getElementById('ta-msg').innerHTML = '<span class="status-dot status-idle"></span>Stopped — cache cleared.';
     } else if (data.status === 'error') {
       clearInterval(BATCH_POLL);
       document.getElementById('ta-msg').innerHTML = `<span class="status-dot status-error"></span>Error: ${data.error}`;
       document.getElementById('ta-btn-train').disabled = false;
       document.getElementById('ta-btn-train').textContent = '🏋️ Train All Models';
+      const sb2 = document.getElementById('ta-stop-btn'); if (sb2) sb2.style.display='none';
     }
   }, 800);
 }
@@ -95,4 +105,45 @@ async function loadModelError() {
   const [rawFig, errFig] = await Promise.all([rawRes.json(), errRes.json()]);
   Plotly.newPlot('ta-inspect-raw', rawFig.data, rawFig.layout, {displayModeBar:false, responsive:true});
   Plotly.newPlot('ta-inspect-err', errFig.data, errFig.layout, {displayModeBar:false, responsive:true});
+}
+
+async function taClearCache() {
+  const btn = event.currentTarget;
+  btn.disabled = true; btn.textContent = '⏳ Clearing…';
+  try {
+    const res  = await fetch('/api/train-all/clear-cache/', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('ta-clear-msg').textContent =
+      `✓ ลบ ${data.cleared} job(s) — RAM คืนแล้ว`;
+    // Reset UI state
+    BATCH_JOB_ID = null;
+    RESULTS_CACHE = null; RESULTS_CACHE_KEY = null;
+    if (BATCH_POLL) { clearInterval(BATCH_POLL); BATCH_POLL = null; }
+    const pcaSec = document.getElementById('ta-pca-section');
+    if (pcaSec) pcaSec.style.display = 'none';
+  } catch(e) {
+    document.getElementById('ta-clear-msg').textContent = '❌ Error';
+  }
+  btn.disabled = false; btn.textContent = '🗑 Clear cache (คืน RAM)';
+}
+
+
+async function taStopTrainAll() {
+  if (!BATCH_JOB_ID) return;
+  if (BATCH_POLL) { clearInterval(BATCH_POLL); BATCH_POLL = null; }
+  try {
+    await fetch('/api/train-all/stop/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({job_id: BATCH_JOB_ID}),
+    });
+  } catch(e) {}
+  BATCH_JOB_ID = null;
+  RESULTS_CACHE = null; RESULTS_CACHE_KEY = null;
+  const btn = document.getElementById('ta-btn-train');
+  if (btn) { btn.disabled = false; btn.textContent = '🏋️ Train All Models'; }
+  const stopBtn = document.getElementById('ta-stop-btn');
+  if (stopBtn) stopBtn.style.display = 'none';
+  const msg = document.getElementById('ta-msg');
+  if (msg) msg.innerHTML = '⏹ Stopped & cache cleared.';
 }

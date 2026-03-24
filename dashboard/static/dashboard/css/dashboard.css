@@ -200,3 +200,22 @@ input[type=range] {
 .tuner-controls .form-group { margin-bottom:8px !important; }
 .tuner-controls .card.th-section { padding:10px !important; }
 .tuner-controls .th-title { margin-bottom:4px !important; }
+
+/* ── Sidebar chips (hidden/layers/batch) ───────────────────────── */
+.sidebar-chip {
+  font-size:0.7rem; padding:2px 9px; border-radius:12px;
+  border:1px solid var(--border); color:var(--text-3);
+  cursor:pointer; user-select:none; background:var(--bg);
+  transition:all .1s;
+}
+.sidebar-chip.sid-on { background:#eff6ff; border-color:var(--accent); color:var(--accent); font-weight:600; }
+.sidebar-chip:hover   { border-color:var(--border-2); color:var(--text-2); }
+
+/* ── Raw Data Editor ─────────────────────────────────────────────── */
+.rd-mode-btn {
+  font-size:0.73rem; padding:4px 12px; border-radius:5px;
+  border:1px solid var(--border); background:var(--bg);
+  color:var(--text-2); cursor:pointer; transition:all .12s;
+}
+.rd-mode-btn:hover  { border-color:var(--border-2); }
+.rd-mode-btn.rd-active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }

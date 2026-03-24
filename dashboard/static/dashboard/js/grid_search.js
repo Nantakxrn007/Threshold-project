@@ -248,6 +248,8 @@ async function gsStart() {
     if (!res.ok) throw new Error(data.error || 'Server error');
     GRID_JOB_ID = data.job_id;
     const modeLabel = {grid:'Grid',random:'Random',optuna:'Optuna Bayesian'}[data.mode] || data.mode;
+    const gsStopBtn = document.getElementById('gs-stop-btn');
+    if (gsStopBtn) gsStopBtn.style.display = 'inline-flex';
     gsInitProgressTable(data.total, modeLabel);
     if (GRID_POLL) clearInterval(GRID_POLL);
     GRID_POLL = setInterval(gsPoll, 1200);
@@ -276,12 +278,20 @@ async function gsPoll() {
     gsRenderProgress(data);
     if (data.status === 'done') {
       clearInterval(GRID_POLL);
+      const sb = document.getElementById('gs-stop-btn'); if (sb) sb.style.display='none';
       gsRenderResults(data);
       gsLoadBestCharts();
       document.getElementById('gs-run-btn').disabled = false;
       document.getElementById('gs-run-btn').textContent = 'Run grid search';
+    } else if (data.status === 'stopped') {
+      clearInterval(GRID_POLL);
+      const sbS = document.getElementById('gs-stop-btn'); if (sbS) sbS.style.display='none';
+      gsRenderResults(data);
+      document.getElementById('gs-run-btn').disabled = false;
+      document.getElementById('gs-run-btn').textContent = 'Run grid search';
     } else if (data.status === 'error') {
       clearInterval(GRID_POLL);
+      const sb2 = document.getElementById('gs-stop-btn'); if (sb2) sb2.style.display='none';
       document.getElementById('gs-prog-tbody').innerHTML =
         `<tr><td colspan="10" style="padding:20px;color:var(--red);font-family:'JetBrains Mono',monospace;">❌ ${data.error}</td></tr>`;
       document.getElementById('gs-run-btn').disabled = false;
@@ -435,4 +445,30 @@ function gsCSV() {
       a.href=url; a.download='grid_search_results.csv'; a.click();
       URL.revokeObjectURL(url);
     });
+}
+
+
+// ── Grid Search: Stop ─────────────────────────────────────────────
+async function gsStop() {
+  if (!GRID_JOB_ID) return;
+  if (GRID_POLL) { clearInterval(GRID_POLL); GRID_POLL = null; }
+  try {
+    await fetch('/api/grid-search/stop/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({job_id: GRID_JOB_ID}),
+    });
+  } catch(e) {}
+  // Still show partial results
+  gsPoll();
+  document.getElementById('gs-run-btn').disabled = false;
+  document.getElementById('gs-run-btn').textContent = 'Run grid search';
+  const sb = document.getElementById('gs-stop-btn');
+  if (sb) sb.style.display = 'none';
+}
+
+// ── Grid Search: Download partial/full CSV ────────────────────────
+function gsDownloadCSV() {
+  if (!GRID_JOB_ID) return;
+  window.location.href = `/api/grid-search/export/${GRID_JOB_ID}/`;
 }

@@ -27,7 +27,10 @@ warnings.filterwarnings("ignore")
 # ── Constants ────────────────────────────────────────────────────────────────
 FEATS = ["conductivity", "pH", "temperature", "voltage"]
 NORMAL_RUNS = ["NOV_6_3", "NOV_12_6", "NOV_28_1"]
-ANOMALY_RUNS = ["NOV_6_5", "NOV_14_4", "NOV_20_1", "NOV_26_8"]
+# ANOMALY_RUNS = ["NOV_6_5", "NOV_14_4", "NOV_20_1", "NOV_26_8"] #validation runs (not used for training)
+ANOMALY_RUNS = ["NOV_17_1","NOV_20_4", "NOV_26_5", "NOV_26_12", "NOV_27_3", "NOV_27_6", "NOV_28_3"] #test runs (used for training) - 9 runs with various anomaly patterns, including the 4 validation runs plus 5 additional ones with different anomaly types and durations. This provides a more comprehensive training set for the models to learn from.
+# ANOMALY_RUNS = ["NOV_5_1 ", "NOV_6_2", "NOV_10_2", "NOV_26_12"]
+
 ALL_RUNS = NORMAL_RUNS + ANOMALY_RUNS
 LABEL_COLS = ["Anomaly V_filled", "Anomaly C_filled", "Anomaly P_filled", "Anomaly T_filled"]
 
@@ -70,12 +73,22 @@ def load_and_clean_data(file_path='data_cleaned3.csv', max_gap=30) -> pd.DataFra
                             
     return df
 
+def read_test(file_path='data_cleaned3.csv') -> pd.DataFrame:
+    """
+    โหลดข้อมูลจริงแบบไม่แก้ไข Label เลย (สำหรับการประเมินผล)
+    """
+    df = pd.read_csv(file_path)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    return df
+
+
 def get_training_data() -> pd.DataFrame:
     """
     เรียกใช้ฟังก์ชัน clean ข้อมูล และส่งออก DataFrame ที่พร้อมใช้งาน
     """
     # โหลดและคลีน Label ทั้งหมด
-    df = load_and_clean_data('data_cleaned7.csv', max_gap=30)
+    # df = load_and_clean_data('data_cleaned7.csv', max_gap=30)
+    df = read_test('all_runs_labels.csv')  # ใช้ข้อมูลแบบไม่แก้ไขสำหรับการประเมินผล
     df = df[df['run_id'].isin(ALL_RUNS)]
     # กรองเอาเฉพาะ run_id ที่เรากำหนดไว้ใน Constants (ถ้าต้องการ)
     # df = df[df['run_id'].isin(ALL_RUNS)]
@@ -84,7 +97,7 @@ def get_training_data() -> pd.DataFrame:
 
 
 # ── Models ───────────────────────────────────────────────────────────────────
-
+ 
 class PlainAE(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, **_):
         super().__init__()
@@ -99,25 +112,25 @@ class PlainAE(nn.Module):
             nn.Linear(hidden, hidden * 4), nn.ReLU(),
             nn.Linear(hidden * 4, d),
         )
-
+ 
     def forward(self, x):
         b = x.shape[0]
         z = self.enc(x.view(b, -1))
         return self.dec(z).view(b, self.seq_len, self.n_feat), z
-
-
+ 
+ 
 class PlainLSTM(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, layers=1, **_):
         super().__init__()
         self.seq_len = seq_len
         self.lstm    = nn.LSTM(n_feat, hidden, layers, batch_first=True)
         self.out     = nn.Linear(hidden, n_feat)
-
+ 
     def forward(self, x):
         o, (hn, _) = self.lstm(x)
         return self.out(o), hn[-1]
-
-
+ 
+ 
 class LSTMAE(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, layers=1, **_):
         super().__init__()
@@ -125,14 +138,14 @@ class LSTMAE(nn.Module):
         self.enc = nn.LSTM(n_feat,   hidden, layers, batch_first=True)
         self.dec = nn.LSTM(hidden, hidden, layers, batch_first=True)
         self.out = nn.Linear(hidden, n_feat)
-
+ 
     def forward(self, x):
         _, (hn, _) = self.enc(x)
         z = hn[-1]
         o, _ = self.dec(z.unsqueeze(1).repeat(1, self.seq_len, 1))
         return self.out(o), z
-
-
+ 
+ 
 class GRUAE(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, layers=1, **_):
         super().__init__()
@@ -140,14 +153,14 @@ class GRUAE(nn.Module):
         self.enc = nn.GRU(n_feat,   hidden, layers, batch_first=True)
         self.dec = nn.GRU(hidden, hidden, layers, batch_first=True)
         self.out = nn.Linear(hidden, n_feat)
-
+ 
     def forward(self, x):
         _, hn = self.enc(x)
         z = hn[-1]
         o, _ = self.dec(z.unsqueeze(1).repeat(1, self.seq_len, 1))
         return self.out(o), z
-
-
+ 
+ 
 class CNNLSTMAE(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, layers=1, cnn_filters=32, **_):
         super().__init__()
@@ -156,27 +169,27 @@ class CNNLSTMAE(nn.Module):
         self.enc  = nn.LSTM(cnn_filters, hidden, layers, batch_first=True)
         self.dec  = nn.LSTM(hidden,      hidden, layers, batch_first=True)
         self.out  = nn.Linear(hidden, n_feat)
-
+ 
     def forward(self, x):
         xc = torch.relu(self.conv(x.permute(0, 2, 1))).permute(0, 2, 1)
         _, (hn, _) = self.enc(xc)
         z = hn[-1]
         o, _ = self.dec(z.unsqueeze(1).repeat(1, self.seq_len, 1))
         return self.out(o), z
-
-
+ 
+ 
 class _Attention(nn.Module):
     def __init__(self, hidden):
         super().__init__()
         self.w = nn.Linear(hidden, 1)
-
+ 
     def forward(self, enc_out):
         # enc_out: (B, T, H)
         weights = torch.softmax(self.w(enc_out).squeeze(-1), dim=1)  # (B, T)
         context = (enc_out * weights.unsqueeze(-1)).sum(dim=1)        # (B, H)
         return context, weights
-
-
+ 
+ 
 class LSTMAttentionAE(nn.Module):
     def __init__(self, n_feat, seq_len, hidden=16, layers=1, **_):
         super().__init__()
@@ -185,14 +198,14 @@ class LSTMAttentionAE(nn.Module):
         self.attn = _Attention(hidden)
         self.dec  = nn.LSTM(hidden, hidden, layers, batch_first=True)
         self.out  = nn.Linear(hidden, n_feat)
-
+ 
     def forward(self, x):
         enc_out, _ = self.enc(x)
         z, _       = self.attn(enc_out)
         o, _       = self.dec(z.unsqueeze(1).repeat(1, self.seq_len, 1))
         return self.out(o), z
-
-
+ 
+ 
 MODEL_MAP = {
     "LSTM-AE":           LSTMAE,
     "GRU-AE":            GRUAE,
@@ -201,10 +214,10 @@ MODEL_MAP = {
     "Plain-LSTM":        PlainLSTM,
     "LSTM-Attention-AE": LSTMAttentionAE,
 }
-
-
+ 
+ 
 # ── Pipeline ─────────────────────────────────────────────────────────────────
-
+ 
 class Pipeline:
     def __init__(
         self,
@@ -216,12 +229,22 @@ class Pipeline:
         hidden:     int,
         layers:     int,
         lr:         float,
+        seed:       int = 42,   # fix seed → reproducible results across runs
     ):
         self.seq_len    = seq_len
         self.ewma       = ewma
         self.epochs     = epochs
         self.batch_size = batch_size
         self.scaler     = StandardScaler()
+ 
+        # Fix random seed for reproducibility
+        self._seed = seed
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        import numpy as _np
+        _np.random.seed(seed)
+ 
         # Auto-detect: CUDA → MPS (Apple) → CPU
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -230,25 +253,25 @@ class Pipeline:
         else:
             self.device = torch.device("cpu")
         self.loss_history: list[float] = []
-
+ 
         cls         = MODEL_MAP[model_type]
         self.model  = cls(len(FEATS), seq_len, hidden=hidden, layers=layers).to(self.device)
         self.opt    = optim.Adam(self.model.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()
-
+ 
     # ── helpers ──────────────────────────────────────────────────
-
+ 
     def _make_sequences(self, arr: np.ndarray) -> np.ndarray:
         return np.array([
             arr[i : i + self.seq_len]
             for i in range(len(arr) - self.seq_len + 1)
         ])
-
+ 
     # ── public ───────────────────────────────────────────────────
-
+ 
     def train(self, df_normal: pd.DataFrame, on_epoch=None) -> None:
         self.scaler.fit(df_normal[FEATS])
-
+ 
         all_seqs = []
         for rid in df_normal["run_id"].unique():
             scaled = self.scaler.transform(
@@ -257,17 +280,20 @@ class Pipeline:
             seqs = self._make_sequences(scaled)
             if len(seqs):
                 all_seqs.append(seqs)
-
+ 
         X  = torch.FloatTensor(np.vstack(all_seqs)).to(self.device)
+        g = torch.Generator()
+        g.manual_seed(self._seed)
         dl = DataLoader(
             TensorDataset(X, X),
             batch_size=self.batch_size,
             shuffle=True,
+            generator=g,
         )
-
+ 
         self.model.train()
         self.loss_history = []
-
+ 
         for _ in range(self.epochs):
             total = 0.0
             for bx, _ in dl:
@@ -280,7 +306,7 @@ class Pipeline:
             self.loss_history.append(total / len(dl))
             if on_epoch:
                 on_epoch(len(self.loss_history), self.loss_history[-1])
-
+ 
     def evaluate(self, df: pd.DataFrame, agg: str = "mean"):
         """
         agg: วิธีรวม per-sensor error เป็น overall_error
@@ -290,27 +316,27 @@ class Pipeline:
         """
         self.model.eval()
         err_rows, z_vecs, z_labels = [], [], []
-
+ 
         for rid in df["run_id"].unique():
             dfr    = df[df["run_id"] == rid].reset_index(drop=True)
             scaled = self.scaler.transform(dfr[FEATS])
             seqs   = self._make_sequences(scaled)
             if not len(seqs):
                 continue
-
+ 
             with torch.no_grad():
                 recon, z = self.model(torch.FloatTensor(seqs).to(self.device))
-
+ 
             z_vecs.append(z.cpu().numpy())
             z_labels.extend([rid] * len(z))
-
+ 
             mae = np.abs(seqs[:, -1, :] - recon.cpu().numpy()[:, -1, :])
             df_mae = (
                 pd.DataFrame(mae, columns=FEATS)
                 .ewm(alpha=self.ewma, adjust=False)
                 .mean()
             )
-
+ 
             # ── Aggregation method ──────────────────────────────────
             if agg == "max":
                 df_mae["overall_error"] = df_mae[FEATS].max(axis=1)
@@ -318,26 +344,26 @@ class Pipeline:
                 df_mae["overall_error"] = np.sqrt((df_mae[FEATS] ** 2).sum(axis=1))
             else:  # "mean"
                 df_mae["overall_error"] = df_mae[FEATS].mean(axis=1)
-
+ 
             # Pad the first (seq_len - 1) rows with NaN
             pad   = pd.DataFrame(np.nan, index=range(self.seq_len - 1), columns=df_mae.columns)
             dfull = pd.concat([pad, df_mae], ignore_index=True)
             dfull["run_id"] = rid
             err_rows.append(dfull)
-
+ 
         return pd.concat(err_rows, ignore_index=True), np.vstack(z_vecs), z_labels
-
-
+ 
+ 
 # ── Threshold Evaluator ──────────────────────────────────────────────────────
-
+ 
 class ThresholdEvaluator:
     def __init__(self, normal_errors: np.ndarray):
         self.normal_errors = normal_errors
-
+ 
     def calculate(self, err_series: pd.Series, cfg: dict):
         err = err_series.fillna(0).values
         n   = len(err)
-
+ 
         # ── TH1: Sliding Window Percentile ───────────────────────
         # th1_mode: "static" = คำนวณจาก normal_errors ทั้งหมดครั้งเดียว (เส้นตรง)
         #           "sliding" = คำนวณจาก window ก่อนหน้า N points เท่านั้น (realistic)
@@ -345,7 +371,7 @@ class ThresholdEvaluator:
         th1_mode  = cfg.get("th1_mode",   "sliding")
         win1      = max(int(cfg.get("th1_win",    100)), 1)
         recalc1   = max(int(cfg.get("th1_recalc",  10)), 1)
-
+ 
         th1 = np.zeros(n)
         if th1_mode == "static":
             # เดิม: ใช้ normal_errors เป็น baseline (ไม่ใช้ future data)
@@ -360,7 +386,7 @@ class ThresholdEvaluator:
                     w    = err[max(0, i - win1) : i]
                     cur1 = float(np.nanpercentile(w, pct_val))
                 th1[i] = cur1
-
+ 
         # ── TH2: Sliding window Mu + α·Std ───────────────────────
         th2    = np.zeros(n)
         alpha2 = cfg.get("th2_alpha",  3.5)
@@ -373,7 +399,7 @@ class ThresholdEvaluator:
                 mu, sd = np.mean(err[i - win2 : i]), np.std(err[i - win2 : i])
                 cur2   = mu + alpha2 * sd
             th2[i] = cur2
-
+ 
         # ── TH3: Adaptive-z ───────────────────────────────────────
         th3     = np.zeros(n)
         zlo     = cfg.get("th3_zmin",   2.0)
@@ -397,7 +423,7 @@ class ThresholdEvaluator:
                 )
                 cur3 = mu_a + z_val * sd_a
             th3[i] = cur3
-
+ 
         # ── TH4: Entropy-lock ─────────────────────────────────────
         th4       = np.zeros(n)
         alpha4    = cfg.get("th4_alpha", 3.5)
@@ -407,7 +433,7 @@ class ThresholdEvaluator:
         recalc4   = max(int(cfg.get("th4_recalc",   1)), 1)
         locked_n, cons_viol, Dh1, h_prev = None, 0, None, 0.0
         cur_th4   = err[0] + 0.1 if n > 0 else 0.1
-
+ 
         for k in range(1, n):
             if k % recalc4 == 0:
                 if locked_n is None and k > 10:
@@ -427,7 +453,7 @@ class ThresholdEvaluator:
                                 cons_viol = 0
                             if cons_viol >= cons_req:
                                 locked_n = min(k, win4)
-
+ 
                 actual_win = locked_n if locked_n else min(k, win4)
                 w = err[max(0, k - actual_win) : k]
                 cur_th4 = (
@@ -436,14 +462,14 @@ class ThresholdEvaluator:
                     else err[k] + 0.1
                 )
             th4[k] = cur_th4
-
+ 
         return th1, th2, th3, th4
-
+ 
 # ── Metrics ───────────────────────────────────────────────────────────────────
-
+ 
 TH_NAMES = ["P99 Static", "Sliding Mu+αStd", "Adaptive-z", "Entropy-lock"]
-
-
+ 
+ 
 def _get_anomaly_segments(y_true: np.ndarray) -> list:
     """
     หาช่วง anomaly segments จาก y_true (0/1 array)
@@ -461,14 +487,14 @@ def _get_anomaly_segments(y_true: np.ndarray) -> list:
     if in_seg:
         segments.append((seg_start, len(y_true) - 1))
     return segments
-
-
+ 
+ 
 def _point_adjust(y_pred: np.ndarray, y_true: np.ndarray) -> np.ndarray:
     """
     Point-Adjusted prediction:
     ถ้า model ตรวจเจอ anomaly อย่างน้อย 1 point ในช่วง anomaly segment
     → นับว่าทุก point ในช่วงนั้นเป็น TP หมด (y_pred_adj = 1 ทั้งช่วง)
-
+ 
     หมายเหตุ: _filled label ที่ใช้ทำ Gap Filling ≤ 30 points ไปแล้ว
     ทำให้ segment ที่ห่างกัน ≤ 30 points ถูก merge เป็น segment เดียวก่อน
     ดังนั้น Point-Adjusted นี้จึงทำงานบน cleaned segment ที่ถูกต้องแล้ว
@@ -479,8 +505,8 @@ def _point_adjust(y_pred: np.ndarray, y_true: np.ndarray) -> np.ndarray:
         if y_pred[seg_start:seg_end + 1].any():
             y_adj[seg_start:seg_end + 1] = 1
     return y_adj
-
-
+ 
+ 
 def compute_metrics_from_error(df_err: pd.DataFrame, df_original: pd.DataFrame, cfg: dict) -> tuple:
     """
     คำนวณ Confusion Matrix metrics (Point-Adjusted) ทุก run × ทุก threshold method
@@ -488,45 +514,49 @@ def compute_metrics_from_error(df_err: pd.DataFrame, df_original: pd.DataFrame, 
       results_dict = { run_id: { th_name: { tp,fp,tn,fn,precision,recall,f1,accuracy,flagged,pct,
                                              pa_tp,pa_fp,pa_tn,pa_fn,n_segments,n_detected_segs } } }
     """
-    has_labels = all(c in df_original.columns for c in LABEL_COLS)
-
+    has_labels = any(c in df_original.columns for c in LABEL_COLS)
+ 
     normal_errors = df_err[df_err["run_id"].isin(NORMAL_RUNS)]["overall_error"].dropna().values
     evaluator     = ThresholdEvaluator(normal_errors)
     results       = {}
-
+ 
     for run_id in df_err["run_id"].unique():
         dfr        = df_err[df_err["run_id"] == run_id].reset_index(drop=True)
         th1, th2, th3, th4 = evaluator.calculate(dfr["overall_error"], cfg)
         err_vals   = dfr["overall_error"].fillna(0).values
         valid_mask = ~dfr["overall_error"].isna().values
-
+ 
         if has_labels:
             df_run     = df_original[df_original["run_id"] == run_id].reset_index(drop=True)
-            y_true_raw = (df_run[LABEL_COLS].max(axis=1).values > 0).astype(int)
-            # align length to error array
-            n = len(err_vals)
-            if len(y_true_raw) >= n:
-                y_true = y_true_raw[:n]
+            present    = [c for c in LABEL_COLS if c in df_run.columns]
+            if not present:
+                y_true = None
             else:
-                y_true = np.concatenate([y_true_raw, np.zeros(n - len(y_true_raw), dtype=int)])
+                y_true_raw = (df_run[present].fillna(0).max(axis=1).values > 0).astype(int)
+                # align length to error array
+                n = len(err_vals)
+                if len(y_true_raw) >= n:
+                    y_true = y_true_raw[:n]
+                else:
+                    y_true = np.concatenate([y_true_raw, np.zeros(n - len(y_true_raw), dtype=int)])
         else:
             y_true = None
-
+ 
         run_result = {}
         for th_name, th_vals in zip(TH_NAMES, [th1, th2, th3, th4]):
             y_pred  = (err_vals > th_vals).astype(int)
             flagged = int(y_pred.sum())
             pct     = round(100 * flagged / max(len(y_pred), 1), 1)
             m       = dict(flagged=flagged, pct=pct)
-
+ 
             if y_true is not None:
                 # ── Point-Adjusted ────────────────────────────────────
                 y_adj = _point_adjust(y_pred, y_true)
-
+ 
                 # apply valid_mask (ignore NaN padded rows)
                 yp = y_adj[valid_mask]
                 yt = y_true[valid_mask]
-
+ 
                 tp = int(((yp == 1) & (yt == 1)).sum())
                 fp = int(((yp == 1) & (yt == 0)).sum())
                 tn = int(((yp == 0) & (yt == 0)).sum())
@@ -535,14 +565,14 @@ def compute_metrics_from_error(df_err: pd.DataFrame, df_original: pd.DataFrame, 
                 rec  = tp / max(tp + fn, 1)
                 f1   = 2 * prec * rec / max(prec + rec, 1e-9)
                 acc  = (tp + tn) / max(tp + fp + tn + fn, 1)
-
+ 
                 # ── segment-level stats ───────────────────────────────
                 # นับ segments จาก y_true (overall = max ของทุก sensor หลัง gap fill)
                 # ใช้ y_true ตรงๆ ไม่ต้อง union per-sensor เพราะ y_true ทำไปแล้ว
                 segments = _get_anomaly_segments(y_true)
                 n_segs   = len(segments)
                 detected = sum(1 for s, e in segments if y_pred[s:e+1].any())
-
+ 
                 m.update(dict(
                     tp=tp, fp=fp, tn=tn, fn=fn,
                     precision=round(prec, 4),
@@ -552,8 +582,9 @@ def compute_metrics_from_error(df_err: pd.DataFrame, df_original: pd.DataFrame, 
                     n_segments=n_segs,
                     n_detected_segs=detected,
                 ))
-
+ 
             run_result[th_name] = m
         results[run_id] = run_result
-
+ 
     return results, has_labels
+ 

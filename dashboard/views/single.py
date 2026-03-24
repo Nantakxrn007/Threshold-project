@@ -299,12 +299,53 @@ def api_chart_threshold(request):
             line=dict(color=TH_COLORS[name], dash=dash, width=1.8),
         ))
 
-    anom = np.where(err_vals > th1)[0]
-    if len(anom):
-        for g in np.split(anom, np.where(np.diff(anom) != 1)[0] + 1):
-            if len(g):
-                fig.add_vrect(x0=int(g[0]), x1=int(g[-1]),
-                    fillcolor="rgba(239,68,68,0.07)", layer="below", line_width=0)
+    # Per-threshold detection bands — Scatter fill="toself" per segment so toggle works.
+    # First segment gets showlegend=True (the legend item), rest share legendgroup → hidden.
+    _TH_BAND = {
+        "P99 Static":      ("rgba(234,179,8,0.18)",    "rgba(234,179,8,0.65)",   "#ca8a04"),
+        "Sliding Mu+αStd": ("rgba(59,130,246,0.13)",  "rgba(59,130,246,0.55)",  "#3b82f6"),
+        "Adaptive-z":      ("rgba(16,185,129,0.13)",  "rgba(16,185,129,0.55)",  "#10b981"),
+        "Entropy-lock":    ("rgba(124,58,237,0.13)",  "rgba(124,58,237,0.55)",  "#7c3aed"),
+    }
+    y_max = float(dfr["overall_error"].max()) * 1.15 or 1.0
+    for th_name, th_vals in [
+        ("P99 Static", th1), ("Sliding Mu+αStd", th2),
+        ("Adaptive-z", th3), ("Entropy-lock", th4),
+    ]:
+        fill_rgba, marker_rgba, line_hex = _TH_BAND[th_name]
+        anom = np.where(err_vals > th_vals)[0]
+        band_group = f"band_{th_name}"
+        if not len(anom):
+            # Still add a dummy legend entry so the item always appears
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None], mode="markers",
+                name=f"{th_name} band",
+                legendgroup=band_group,
+                showlegend=True,
+                marker=dict(size=10, color=marker_rgba, symbol="square",
+                            line=dict(width=1, color=line_hex)),
+                hoverinfo="skip",
+            ))
+            continue
+        segs = np.split(anom, np.where(np.diff(anom) != 1)[0] + 1)
+        for i, g in enumerate(segs):
+            if not len(g):
+                continue
+            x0, x1 = int(g[0]) - 0.5, int(g[-1]) + 0.5
+            fig.add_trace(go.Scatter(
+                x=[x0, x1, x1, x0, x0],
+                y=[0, 0, y_max, y_max, 0],
+                mode="lines", fill="toself",
+                fillcolor=fill_rgba,
+                line=dict(width=0),
+                name=f"{th_name} band",
+                legendgroup=band_group,
+                showlegend=(i == 0),   # only first segment shows in legend
+                legendrank=1000,
+                marker=dict(color=marker_rgba, symbol="square",
+                            line=dict(width=1, color=line_hex)),
+                hoverinfo="skip",
+            ))
 
     if show_labels:
         fig = _add_anomaly_marks(fig, df_raw, show_raw=False)

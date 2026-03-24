@@ -1,4 +1,4 @@
-    <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+<!-- ── Sidebar ─────────────────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-section-title">⚙ Model Config</div>
@@ -15,8 +15,13 @@
             <label class="form-label" style="margin:0">Window (seq_len)</label>
             <span class="range-val" id="seq-val">10</span>
           </div>
-          <input type="range" id="seq-len" min="5" max="50" value="10"
-                 oninput="document.getElementById('seq-val').textContent=this.value">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="range" id="seq-len" min="5" max="200" value="10" style="flex:1;"
+                   oninput="document.getElementById('seq-val').textContent=this.value;document.getElementById('seq-len-n').value=this.value">
+            <input type="number" id="seq-len-n" value="10" min="1" step="1"
+                   style="width:52px;font-size:0.72rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center;"
+                   oninput="document.getElementById('seq-len').value=this.value;document.getElementById('seq-val').textContent=this.value">
+          </div>
         </div>
 
         <div class="form-group">
@@ -24,24 +29,38 @@
             <label class="form-label" style="margin:0">Epochs</label>
             <span class="range-val" id="epochs-val">30</span>
           </div>
-          <input type="range" id="epochs" min="10" max="200" step="10" value="30"
-                 oninput="document.getElementById('epochs-val').textContent=this.value">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="range" id="epochs" min="5" max="500" step="5" value="30" style="flex:1;"
+                   oninput="document.getElementById('epochs-val').textContent=this.value;document.getElementById('epochs-n').value=this.value">
+            <input type="number" id="epochs-n" value="30" min="1" step="5"
+                   style="width:52px;font-size:0.72rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center;"
+                   oninput="document.getElementById('epochs').value=this.value;document.getElementById('epochs-val').textContent=this.value">
+          </div>
         </div>
 
         <div class="form-group">
           <label class="form-label">Hidden Size</label>
-          <select id="hidden">
-            <option value="8">8</option><option value="16" selected>16</option>
-            <option value="32">32</option><option value="64">64</option>
-          </select>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+            <span class="sidebar-chip sid-on" onclick="sidChip(this,'hidden')">16</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'hidden')">32</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'hidden')">64</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'hidden')">128</span>
+          </div>
+          <input type="number" id="hidden" value="16" min="1" step="8"
+                 style="width:80px;font-size:0.75rem;" placeholder="custom"
+                 oninput="sidSyncChips(this,'hidden')">
         </div>
 
         <div class="form-group">
           <label class="form-label">Layers</label>
-          <select id="layers">
-            <option value="1" selected>1</option>
-            <option value="2">2</option><option value="3">3</option>
-          </select>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+            <span class="sidebar-chip sid-on" onclick="sidChip(this,'layers')">1</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'layers')">2</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'layers')">3</span>
+          </div>
+          <input type="number" id="layers" value="1" min="1" max="8" step="1"
+                 style="width:80px;font-size:0.75rem;" placeholder="custom"
+                 oninput="sidSyncChips(this,'layers')">
         </div>
 
         <div class="form-group">
@@ -51,10 +70,15 @@
 
         <div class="form-group">
           <label class="form-label">Batch Size</label>
-          <select id="batch">
-            <option value="32">32</option><option value="64" selected>64</option>
-            <option value="128">128</option><option value="256">256</option>
-          </select>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">
+            <span class="sidebar-chip" onclick="sidChip(this,'batch')">32</span>
+            <span class="sidebar-chip sid-on" onclick="sidChip(this,'batch')">64</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'batch')">128</span>
+            <span class="sidebar-chip" onclick="sidChip(this,'batch')">256</span>
+          </div>
+          <input type="number" id="batch" value="64" min="1" step="16"
+                 style="width:80px;font-size:0.75rem;" placeholder="custom"
+                 oninput="sidSyncChips(this,'batch')">
         </div>
 
         <div class="form-group">
@@ -62,8 +86,13 @@
             <label class="form-label" style="margin:0">EWMA Alpha</label>
             <span class="range-val" id="ewma-val">0.3</span>
           </div>
-          <input type="range" id="ewma" min="0.01" max="1" step="0.01" value="0.3"
-                 oninput="document.getElementById('ewma-val').textContent=parseFloat(this.value).toFixed(2)">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="range" id="ewma" min="0.01" max="1" step="0.01" value="0.3" style="flex:1;"
+                   oninput="document.getElementById('ewma-val').textContent=parseFloat(this.value).toFixed(2);document.getElementById('ewma-n').value=parseFloat(this.value).toFixed(2)">
+            <input type="number" id="ewma-n" value="0.3" min="0.001" max="1" step="0.01"
+                   style="width:52px;font-size:0.72rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center;"
+                   oninput="document.getElementById('ewma').value=this.value;document.getElementById('ewma-val').textContent=parseFloat(this.value).toFixed(2)">
+          </div>
         </div>
       </div>
 
@@ -109,4 +138,3 @@
         <div id="loss-chart" style="margin-top:8px;"></div>
       </div>
     </aside>
-

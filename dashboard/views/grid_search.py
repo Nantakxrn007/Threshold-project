@@ -24,6 +24,7 @@ from ._shared import (
 from ..ml import _point_adjust, _get_anomaly_segments
 
 GRID_JOBS: dict = {}
+GRID_STOP_FLAGS: dict = {}
 
 _DEFAULT_CFG = dict(
     th1_pct=99.0, th1_mode="sliding", th1_win=100, th1_recalc=10,
@@ -201,6 +202,11 @@ def _worker_grid(job_id, agg, scoring):
     try:
         model_cache = {}
         for combo in list(GRID_JOBS[job_id]["combos"]):
+            if GRID_STOP_FLAGS.get(job_id):
+                GRID_JOBS[job_id]["status"] = "stopped"
+                GRID_STOP_FLAGS.pop(job_id, None)
+                _finalise(job_id, model_cache, agg)
+                return
             _run_combo(job_id, combo, model_cache, agg, scoring)
         _finalise(job_id, model_cache, agg)
         GRID_JOBS[job_id]["status"] = "done"
@@ -213,6 +219,11 @@ def _worker_random(job_id, param_space, n_trials, batch_size, layers, th_configs
         model_cache = {}
         cid = 0
         for _ in range(n_trials):
+            if GRID_STOP_FLAGS.get(job_id):
+                GRID_JOBS[job_id]["status"] = "stopped"
+                GRID_STOP_FLAGS.pop(job_id, None)
+                _finalise(job_id, model_cache, agg)
+                return
             tc = _random.choice(th_configs)
             combo = _make_combo(
                 cid,
@@ -242,6 +253,8 @@ def _worker_optuna(job_id, param_space, n_trials, batch_size, layers, th_configs
         cid = [0]
 
         def objective(trial):
+            if GRID_STOP_FLAGS.get(job_id):
+                raise optuna.exceptions.OptunaError("stopped")
             tc_i  = trial.suggest_categorical("th_idx", list(range(len(th_configs))))
             tc    = th_configs[tc_i]
             combo = _make_combo(
@@ -262,9 +275,13 @@ def _worker_optuna(job_id, param_space, n_trials, batch_size, layers, th_configs
 
         study = optuna.create_study(direction="maximize",
                                     sampler=optuna.samplers.TPESampler(seed=42))
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        try:
+            study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        except Exception:
+            pass
         _finalise(job_id, model_cache, agg)
-        GRID_JOBS[job_id]["status"] = "done"
+        stopped = GRID_STOP_FLAGS.pop(job_id, False)
+        GRID_JOBS[job_id]["status"] = "stopped" if stopped else "done"
     except ImportError:
         GRID_JOBS[job_id].update({
             "status": "error",
@@ -414,12 +431,21 @@ def api_grid_search_best_charts(request, job_id):
             name=tname + (" *" if is_best else ""),
             line=dict(color=TH_COLORS[tname], dash=dash, width=2.8 if is_best else 1.4),
         ))
-    anom = np.where(err_vals > best_th)[0]
-    if len(anom):
-        for g in np.split(anom, np.where(np.diff(anom) != 1)[0] + 1):
-            if len(g):
-                fig_th.add_vrect(x0=int(g[0]), x1=int(g[-1]),
-                    fillcolor="rgba(239,68,68,0.07)", layer="below", line_width=0)
+    _TH_BAND = {
+        "P99 Static":      "rgba(239,68,68,0.10)",
+        "Sliding Mu+αStd": "rgba(59,130,246,0.10)",
+        "Adaptive-z":      "rgba(16,185,129,0.10)",
+        "Entropy-lock":    "rgba(124,58,237,0.10)",
+    }
+    for _thn, _thv in [("P99 Static",th1),("Sliding Mu+αStd",th2),
+                        ("Adaptive-z",th3),("Entropy-lock",th4)]:
+        _anom = np.where(err_vals > _thv)[0]
+        if not len(_anom): continue
+        for _g in np.split(_anom, np.where(np.diff(_anom)!=1)[0]+1):
+            if len(_g):
+                fig_th.add_vrect(x0=int(_g[0])-0.5, x1=int(_g[-1])+0.5,
+                    fillcolor=_TH_BAND.get(_thn,"rgba(239,68,68,0.07)"),
+                    layer="below", line_width=0)
     if show_labels:
         fig_th = _add_anomaly_marks(fig_th, df_raw, show_raw=False)
     fig_th.update_layout(**_LAYOUT, height=320,
@@ -428,3 +454,59 @@ def api_grid_search_best_charts(request, job_id):
 
     best_info = {k: v for k, v in best.items() if k != "th_cfg"}
     return JsonResponse({"raw": _to_json(fig_raw), "threshold": _to_json(fig_th), "best": best_info})
+
+
+@csrf_exempt
+@require_POST
+def api_grid_search_stop(request):
+    """Stop grid search at current combo, keep partial results."""
+    p      = json.loads(request.body) if request.body else {}
+    job_id = p.get("job_id", "")
+    if job_id and job_id in GRID_JOBS:
+        GRID_STOP_FLAGS[job_id] = True
+        GRID_JOBS[job_id]["status"] = "stopping"
+    return JsonResponse({"ok": True})
+
+
+@require_GET
+def api_grid_search_export(request, job_id):
+    """Export partial or full grid search results as CSV."""
+    import io, csv
+    job = GRID_JOBS.get(job_id)
+    if not job:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    done = [c for c in job["combos"] if c["status"] == "done"]
+    done.sort(key=lambda x: x.get("score") or 0, reverse=True)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "rank","arch","hidden","seq_len","epochs","lr","ewma",
+        "th_name","recalc_n",
+        "precision","recall","f1","accuracy",
+        "seg_det","seg_total","score"
+    ])
+    for i, combo in enumerate(done):
+        import re
+        m = re.search(r"r(\d+(?:\.\d+)?)$", combo.get("th_name",""))
+        recalc_n = m.group(1) if m else "—"
+        writer.writerow([
+            i+1, combo.get("arch",""), combo.get("hidden",""),
+            combo.get("seq_len",""), combo.get("epochs",""),
+            combo.get("lr",""), combo.get("ewma",""),
+            combo.get("th_name",""), recalc_n,
+            round((combo.get("precision") or 0)*100, 1),
+            round((combo.get("recall")    or 0)*100, 1),
+            round((combo.get("f1")        or 0)*100, 1),
+            round((combo.get("accuracy")  or 0)*100, 1),
+            combo.get("n_detected_segs",0),
+            combo.get("n_segments",0),
+            round((combo.get("score")     or 0)*100, 1),
+        ])
+
+    buf.seek(0)
+    from django.http import HttpResponse
+    resp = HttpResponse(buf.read(), content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="grid_search_{job_id}.csv"'
+    return resp
